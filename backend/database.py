@@ -276,6 +276,11 @@ class DatabaseManager:
         for project in projects:
             milestones_response = self.client.table("milestones").select("*").eq("project_id", project["id"]).execute()
             project["milestones"] = milestones_response.data or []
+            # Backfill developer_hourly_rate if missing (old projects)
+            if not project.get("developer_hourly_rate") and project.get("assigned_developer_id"):
+                dev = self.get_user_by_id(project["assigned_developer_id"])
+                if dev and dev.get("hourly_rate"):
+                    project["developer_hourly_rate"] = dev["hourly_rate"]
         return projects
 
     def get_all_projects(self) -> list:
@@ -331,6 +336,11 @@ class DatabaseManager:
             # Fetch client name
             client = self.get_user_by_id(project["user_id"])
             project["client_name"] = client["name"] if client else "Unknown"
+            # Backfill developer_hourly_rate if missing (old projects)
+            if not project.get("developer_hourly_rate"):
+                dev = self.get_user_by_id(developer_id)
+                if dev and dev.get("hourly_rate"):
+                    project["developer_hourly_rate"] = dev["hourly_rate"]
         return projects
 
     def get_user_by_id(self, user_id: str) -> Optional[dict]:
