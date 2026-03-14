@@ -10,7 +10,8 @@ class DatabaseManager:
         """Initialize Supabase client with connection pooling"""
         self.client: Client = create_client(supabase_url, supabase_key)
     
-    def create_project(self, user_id: str, title: str, description: str, milestones: list[dict]) -> str:
+    def create_project(self, user_id: str, title: str, description: str, milestones: list[dict],
+                       developer_id: str = None) -> str:
         """Create new project with milestones in a single transaction"""
         project_id = str(uuid.uuid4())
         now = datetime.utcnow().isoformat()
@@ -24,6 +25,8 @@ class DatabaseManager:
             "created_at": now,
             "updated_at": now
         }
+        if developer_id:
+            project_data["assigned_developer_id"] = developer_id
         
         self.client.table("projects").insert(project_data).execute()
         
@@ -275,3 +278,56 @@ class DatabaseManager:
             milestones_response = self.client.table("milestones").select("*").eq("project_id", project["id"]).execute()
             project["milestones"] = milestones_response.data or []
         return projects
+
+    # ============================================
+    # AUTH METHODS
+    # ============================================
+
+    def create_user(self, user_id: str, name: str, email: str, password_hash: str,
+                    role: str, payment_threshold: float = None) -> dict:
+        """Create a new user account"""
+        now = datetime.utcnow().isoformat()
+        hourly_rate = round(payment_threshold / 160, 2) if payment_threshold else None
+        data = {
+            "id": user_id,
+            "name": name,
+            "email": email,
+            "password_hash": password_hash,
+            "role": role,
+            "payment_threshold": payment_threshold,
+            "hourly_rate": hourly_rate,
+            "created_at": now
+        }
+        self.client.table("users").insert(data).execute()
+        return data
+
+    def get_user_by_email(self, email: str) -> Optional[dict]:
+        """Fetch user by email"""
+        response = self.client.table("users").select("*").eq("email", email).execute()
+        if response.data:
+            return response.data[0]
+        return None
+
+    def get_all_developers(self) -> list:
+        """Get all users with role='developer'"""
+        response = self.client.table("users").select("id,name,email,payment_threshold,hourly_rate,created_at").eq("role", "developer").execute()
+        return response.data or []
+
+    def get_projects_by_developer(self, developer_id: str) -> list:
+        """Get all projects assigned to a developer, with milestones and client info"""
+        response = self.client.table("projects").select("*").eq("assigned_developer_id", developer_id).order("created_at", desc=True).execute()
+        projects = response.data or []
+        for project in projects:
+            milestones_response = self.client.table("milestones").select("*").eq("project_id", project["id"]).execute()
+            project["milestones"] = milestones_response.data or []
+            # Fetch client name
+            client = self.get_user_by_id(project["user_id"])
+            project["client_name"] = client["name"] if client else "Unknown"
+        return projects
+
+    def get_user_by_id(self, user_id: str) -> Optional[dict]:
+        """Fetch user by ID"""
+        response = self.client.table("users").select("*").eq("id", user_id).execute()
+        if response.data:
+            return response.data[0]
+        return None

@@ -78,6 +78,29 @@ class PFIMetrics(BaseModel):
     combined_pfi: float = Field(..., ge=0, le=100)
 
 
+# Auth Models
+class RegisterRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    email: str = Field(..., min_length=3)
+    password: str = Field(..., min_length=6)
+    role: Literal["client", "developer"]
+    payment_threshold: Optional[float] = None  # developer only
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class AuthResponse(BaseModel):
+    user_id: str
+    name: str
+    email: str
+    role: str
+    payment_threshold: Optional[float] = None
+    hourly_rate: Optional[float] = None
+
+
 # API Request/Response Models
 class PlanRequest(BaseModel):
     prompt: str = Field(..., min_length=1)

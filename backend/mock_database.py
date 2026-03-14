@@ -12,8 +12,10 @@ class MockDatabaseManager:
         self.milestones = {}
         self.inspection_results = {}
         self.user_reputation = {}
+        self.users = {}  # email -> user dict
     
-    def create_project(self, user_id: str, title: str, description: str, milestones: list[dict]) -> str:
+    def create_project(self, user_id: str, title: str, description: str, milestones: list[dict],
+                       developer_id: str = None) -> str:
         """Create new project with milestones"""
         project_id = str(uuid.uuid4())
         now = datetime.utcnow().isoformat()
@@ -23,6 +25,7 @@ class MockDatabaseManager:
             "user_id": user_id,
             "title": title,
             "description": description,
+            "assigned_developer_id": developer_id,
             "created_at": now,
             "updated_at": now,
             "milestones": []
@@ -222,3 +225,53 @@ class MockDatabaseManager:
                 self.milestones[milestone_id]["submission_github_url"] = github_url
             elif source == "local" and files:
                 self.milestones[milestone_id]["submission_files"] = files
+
+    def get_all_developers(self) -> list:
+        """Get all users with role='developer'"""
+        return [
+            {"id": u["id"], "name": u["name"], "email": u["email"],
+             "payment_threshold": u.get("payment_threshold"),
+             "hourly_rate": u.get("hourly_rate")}
+            for u in self.users.values() if u.get("role") == "developer"
+        ]
+
+    def get_projects_by_developer(self, developer_id: str) -> list:
+        """Get all projects assigned to a developer, with milestones and client info"""
+        result = []
+        for project_id, project in self.projects.items():
+            if project.get("assigned_developer_id") != developer_id:
+                continue
+            p = project.copy()
+            p["milestones"] = [
+                m.copy() for m in self.milestones.values()
+                if m["project_id"] == project_id
+            ]
+            client = self.get_user_by_id(project["user_id"])
+            p["client_name"] = client["name"] if client else "Unknown"
+            result.append(p)
+        result.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        return result
+
+    # ============================================
+    # AUTH METHODS
+    # ============================================
+    def create_user(self, user_id: str, name: str, email: str, password_hash: str,
+                    role: str, payment_threshold: float = None) -> dict:
+        hourly_rate = round(payment_threshold / 160, 2) if payment_threshold else None
+        data = {
+            "id": user_id, "name": name, "email": email,
+            "password_hash": password_hash, "role": role,
+            "payment_threshold": payment_threshold, "hourly_rate": hourly_rate,
+            "created_at": datetime.utcnow().isoformat()
+        }
+        self.users[email] = data
+        return data
+
+    def get_user_by_email(self, email: str) -> Optional[dict]:
+        return self.users.get(email)
+
+    def get_user_by_id(self, user_id: str) -> Optional[dict]:
+        for u in self.users.values():
+            if u["id"] == user_id:
+                return u
+        return None

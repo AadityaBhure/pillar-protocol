@@ -8,43 +8,175 @@ let conversationHistory = [];
 let currentMilestones = [];
 let currentProjectId = null;
 let estimatedPrice = 0;
+let currentProjectDeadline = null; // project-level deadline from architect chat
 
 // Role state
 let currentRole = null;
 
+// Current logged-in user
+let currentUser = null;
+
+// Selected developer (set from Vendors tab)
+let selectedDeveloperId = null;
+
 // ============================================
-// ROLE SELECTION & NAVIGATION
+// AUTH FUNCTIONS
 // ============================================
 
-function enterAs(role) {
-    currentRole = role;
-    document.getElementById('role-selection').style.display = 'none';
+function switchAuthTab(tab) {
+    document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
+    document.querySelector(`[onclick="switchAuthTab('${tab}')"]`).classList.add('active');
+    document.getElementById(`${tab}-form`).classList.add('active');
+}
 
-    if (role === 'client') {
+function selectRegRole(role) {
+    document.getElementById('reg-role').value = role;
+    document.getElementById('reg-role-client').classList.toggle('active', role === 'client');
+    document.getElementById('reg-role-developer').classList.toggle('active', role === 'developer');
+    const devGroup = document.getElementById('dev-threshold-group');
+    devGroup.style.display = role === 'developer' ? 'block' : 'none';
+    if (role === 'developer') updateThresholdHint();
+}
+
+function updateThresholdHint() {
+    const val = parseFloat(document.getElementById('reg-threshold').value);
+    const hint = document.getElementById('threshold-hint');
+    if (val > 0) {
+        const rate = (val / 160).toFixed(2);
+        hint.textContent = `Equivalent hourly rate: $${rate}/hr (threshold / 160 working hours)`;
+    } else {
+        hint.textContent = '';
+    }
+}
+
+async function doRegister() {
+    const name = document.getElementById('reg-name').value.trim();
+    const email = document.getElementById('reg-email').value.trim();
+    const password = document.getElementById('reg-password').value;
+    const role = document.getElementById('reg-role').value;
+    const threshold = parseFloat(document.getElementById('reg-threshold').value) || null;
+
+    if (!name || !email || !password) { showToast('Missing Fields', 'Please fill in all fields', 'warning'); return; }
+    if (password.length < 6) { showToast('Weak Password', 'Password must be at least 6 characters', 'warning'); return; }
+    if (role === 'developer' && !threshold) { showToast('Missing Threshold', 'Please enter a payment threshold', 'warning'); return; }
+
+    showLoading();
+    try {
+        const res = await fetch(`${API_BASE_URL}/auth/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, email, password, role, payment_threshold: threshold })
+        });
+        const data = await safeJsonParse(res);
+        if (!res.ok) throw new Error(data.detail || 'Registration failed');
+        localStorage.setItem('pillar_user', JSON.stringify(data));
+        currentUser = data;
+        showToast('Welcome!', `Account created. Welcome, ${data.name}!`, 'success');
+        enterApp(data);
+    } catch (e) {
+        showToast('Error', e.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function doLogin() {
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+
+    if (!email || !password) { showToast('Missing Fields', 'Please enter email and password', 'warning'); return; }
+
+    showLoading();
+    try {
+        const res = await fetch(`${API_BASE_URL}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+        const data = await safeJsonParse(res);
+        if (!res.ok) throw new Error(data.detail || 'Login failed');
+        localStorage.setItem('pillar_user', JSON.stringify(data));
+        currentUser = data;
+        showToast('Welcome back!', `Hello, ${data.name}!`, 'success');
+        enterApp(data);
+    } catch (e) {
+        showToast('Error', e.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+function enterApp(user) {
+    document.getElementById('auth-screen').style.display = 'none';
+    currentRole = user.role;
+
+    if (user.role === 'client') {
+        document.getElementById('client-user-id').value = user.user_id;
+        document.getElementById('client-display-name').textContent = user.name;
+        document.getElementById('client-display-email').textContent = user.email;
+        document.getElementById('client-avatar-initials').textContent = user.name.charAt(0).toUpperCase();
+        // Profile tab
+        document.getElementById('profile-client-name').textContent = user.name;
+        document.getElementById('profile-client-email').textContent = user.email;
+        document.getElementById('profile-client-id').textContent = user.user_id;
+        document.getElementById('client-profile-avatar').textContent = user.name.charAt(0).toUpperCase();
         document.getElementById('client-app').style.display = 'flex';
-        document.getElementById('developer-app').style.display = 'none';
         setupNavForApp('client-app');
         loadClientDashboard();
         loadVendors();
         startNewConversation();
     } else {
+        document.getElementById('dev-user-id').value = user.user_id;
+        document.getElementById('dev-display-name').textContent = user.name;
+        document.getElementById('dev-display-email').textContent = user.email;
+        document.getElementById('dev-avatar-initials').textContent = user.name.charAt(0).toUpperCase();
+        document.getElementById('reputation-user-id').value = user.user_id;
+        // Profile tab
+        document.getElementById('profile-dev-name').textContent = user.name;
+        document.getElementById('profile-dev-email').textContent = user.email;
+        document.getElementById('profile-dev-id').textContent = user.user_id;
+        document.getElementById('dev-profile-avatar').textContent = user.name.charAt(0).toUpperCase();
+        if (user.payment_threshold) {
+            document.getElementById('profile-dev-threshold').textContent = `$${user.payment_threshold.toLocaleString()}/month`;
+            document.getElementById('profile-dev-rate').textContent = `$${user.hourly_rate}/hr`;
+        }
         document.getElementById('developer-app').style.display = 'flex';
-        document.getElementById('client-app').style.display = 'none';
         setupNavForApp('developer-app');
-        // Auto-fill reputation user ID from sidebar
-        const devId = document.getElementById('dev-user-id').value.trim();
-        if (devId) document.getElementById('reputation-user-id').value = devId;
-        // Load dashboard immediately
         loadDevDashboard();
     }
 }
 
-function switchRole() {
+function logout() {
+    localStorage.removeItem('pillar_user');
+    currentUser = null;
+    currentRole = null;
     document.getElementById('client-app').style.display = 'none';
     document.getElementById('developer-app').style.display = 'none';
-    document.getElementById('role-selection').style.display = 'flex';
-    currentRole = null;
+    document.getElementById('auth-screen').style.display = 'flex';
+    // Clear login form
+    document.getElementById('login-email').value = '';
+    document.getElementById('login-password').value = '';
+    showToast('Logged out', 'See you next time!', 'info');
 }
+
+function devSwitchTab(tabName) {
+    const app = document.getElementById('developer-app');
+    app.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+    app.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    const btn = app.querySelector(`[data-tab="${tabName}"]`);
+    if (btn) btn.classList.add('active');
+    const tabEl = document.getElementById(`${tabName}-tab`);
+    if (tabEl) tabEl.classList.add('active');
+}
+
+// ============================================
+// ROLE SELECTION & NAVIGATION
+// ============================================
+
+function enterAs(role) { /* legacy stub — use enterApp() */ }
+
+function switchRole() { logout(); }
 
 function setupNavForApp(appId) {
     const app = document.getElementById(appId);
@@ -195,41 +327,56 @@ async function loadDevDashboard() {
     const container = document.getElementById('dev-work-list');
     if (!container) return;
 
-    container.innerHTML = `<div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading all projects...</p></div>`;
+    const devId = currentUser && currentUser.user_id;
+    if (!devId) {
+        container.innerHTML = `<div class="empty-state"><i class="fas fa-user"></i><p>Please log in to see your work.</p></div>`;
+        return;
+    }
+
+    container.innerHTML = `<div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading your assigned projects...</p></div>`;
 
     try {
-        const response = await fetch(`${API_BASE_URL}/projects/all`);
+        const response = await fetch(`${API_BASE_URL}/projects/developer/${devId}`);
         if (!response.ok) throw new Error('Failed to load projects');
         const projects = await safeJsonParse(response);
 
         if (!projects || projects.length === 0) {
-            container.innerHTML = `<div class="empty-state"><i class="fas fa-tasks"></i><p>No projects found in the system yet.</p></div>`;
+            container.innerHTML = `<div class="empty-state"><i class="fas fa-tasks"></i><p>No projects assigned to you yet. Clients will hire you from the Vendors tab.</p></div>`;
             return;
         }
+
+        const hourlyRate = currentUser.hourly_rate || 50;
 
         let html = '';
         projects.forEach(project => {
             const milestones = project.milestones || [];
+            const clientName = project.client_name || project.user_id;
             html += `<div class="milestone-card" style="margin-bottom:16px;">
                 <div class="milestone-header">
                     <div class="milestone-title">${escapeHtml(project.title)}</div>
                     <div style="text-align:right">
-                        <small style="color:var(--text-muted);display:block">${project.id}</small>
-                        <small style="color:var(--accent-primary)">Client: ${escapeHtml(project.user_id)}</small>
+                        <small style="color:var(--text-muted);display:block">ID: ${project.id.slice(0,8)}…</small>
+                        <small style="color:var(--accent-primary)">Client: ${escapeHtml(clientName)}</small>
                     </div>
                 </div>`;
             milestones.forEach((m, i) => {
                 const statusClass = `status-${(m.status || 'pending').toLowerCase()}`;
                 const canSubmit = m.status === 'PENDING';
+                const payment = m.estimated_hours ? `$${(m.estimated_hours * hourlyRate).toLocaleString()}` : '—';
+                const deadline = m.deadline ? new Date(m.deadline).toLocaleDateString() : '—';
                 html += `<div style="padding:10px 0; border-top:1px solid rgba(255,255,255,0.05);">
-                    <div style="display:flex;justify-content:space-between;align-items:center;">
-                        <span>${i + 1}. ${escapeHtml(m.title)}</span>
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                        <span style="font-weight:500">${i + 1}. ${escapeHtml(m.title)}</span>
                         <div style="display:flex;gap:8px;align-items:center;">
                             <span class="status-badge ${statusClass}">${m.status || 'PENDING'}</span>
                             ${canSubmit ? `<button class="btn btn-primary" style="padding:4px 12px;font-size:12px;" onclick="quickSubmit('${project.id}','${m.id}')">Submit</button>` : ''}
                         </div>
                     </div>
-                    ${m.deadline ? `<small style="color:var(--text-muted)">Deadline: ${new Date(m.deadline).toLocaleDateString()}</small>` : ''}
+                    <div style="display:flex;gap:16px;margin-top:4px;font-size:12px;color:var(--text-muted);">
+                        <span><i class="fas fa-calendar"></i> ${deadline}</span>
+                        <span><i class="fas fa-dollar-sign"></i> ${payment}</span>
+                        ${m.estimated_hours ? `<span><i class="fas fa-clock"></i> ${m.estimated_hours}h</span>` : ''}
+                    </div>
                 </div>`;
             });
             html += `</div>`;
@@ -260,54 +407,83 @@ function quickSubmit(projectId, milestoneId) {
 // VENDORS TAB
 // ============================================
 
-function loadVendors() {
+async function loadVendors() {
     const container = document.getElementById('vendors-list');
     if (!container) return;
 
-    const skills = [
-        ['Python', 'FastAPI', 'ML'],
-        ['React', 'TypeScript', 'Node.js'],
-        ['Solidity', 'Web3', 'Rust'],
-        ['Go', 'Kubernetes', 'Docker'],
-        ['Java', 'Spring Boot', 'AWS'],
-        ['Vue.js', 'GraphQL', 'PostgreSQL'],
-        ['Flutter', 'Dart', 'Firebase'],
-        ['C++', 'Embedded', 'RTOS'],
-    ];
+    container.innerHTML = `<div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading developers...</p></div>`;
 
-    const names = [
-        'Alex Chen', 'Maria Santos', 'James Okafor', 'Priya Nair',
-        'Lucas Müller', 'Yuki Tanaka', 'Omar Hassan', 'Sofia Rossi'
-    ];
+    try {
+        const res = await fetch(`${API_BASE_URL}/users/developers`);
+        if (!res.ok) throw new Error('Failed to load developers');
+        const developers = await safeJsonParse(res);
 
-    const vendors = names.map((name, i) => ({
-        name,
-        skills: skills[i],
-        startingPrice: (30 + i * 5) + '/hr',
-        reputation: Math.round(70 + Math.random() * 28),
-        completedJobs: Math.floor(5 + Math.random() * 40),
-        initials: name.split(' ').map(n => n[0]).join('')
-    }));
+        if (!developers || developers.length === 0) {
+            container.innerHTML = `<div class="empty-state"><i class="fas fa-users"></i><p>No developers registered yet.</p></div>`;
+            return;
+        }
 
-    const colors = ['#6366f1','#1dbf73','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#14b8a6'];
+        const colors = ['#6366f1','#1dbf73','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#14b8a6'];
 
-    container.innerHTML = vendors.map((v, i) => {
-        const repColor = v.reputation >= 85 ? 'var(--accent-green)' : v.reputation >= 65 ? '#f59e0b' : 'var(--accent-red)';
-        return `
-        <div class="vendor-card">
-            <div class="vendor-avatar" style="background:${colors[i]}">${v.initials}</div>
-            <div class="vendor-name">${v.name}</div>
-            <div class="vendor-skills">${v.skills.map(s => `<span class="skill-tag">${s}</span>`).join('')}</div>
-            <div class="vendor-meta">
-                <span><i class="fas fa-dollar-sign"></i> $${v.startingPrice}</span>
-                <span><i class="fas fa-check-circle"></i> ${v.completedJobs} jobs</span>
-            </div>
-            <div class="vendor-rep" style="color:${repColor}">
-                <i class="fas fa-star"></i> ${v.reputation} rep
-            </div>
-        </div>`;
-    }).join('');
+        container.innerHTML = developers.map((dev, i) => {
+            const initials = dev.name.split(' ').map(n => n[0]).join('').toUpperCase();
+            const rate = dev.hourly_rate ? `$${dev.hourly_rate}/hr` : 'Rate TBD';
+            const isSelected = selectedDeveloperId === dev.id;
+            return `
+            <div class="vendor-card ${isSelected ? 'vendor-selected' : ''}" id="vendor-card-${dev.id}">
+                <div class="vendor-avatar" style="background:${colors[i % colors.length]}">${initials}</div>
+                <div class="vendor-name">${escapeHtml(dev.name)}</div>
+                <div class="vendor-meta">
+                    <span><i class="fas fa-dollar-sign"></i> ${rate}</span>
+                    ${dev.payment_threshold ? `<span><i class="fas fa-bullseye"></i> $${dev.payment_threshold.toLocaleString()}/mo</span>` : ''}
+                </div>
+                <button class="btn ${isSelected ? 'btn-success' : 'btn-primary'}" style="margin-top:12px;width:100%;"
+                    onclick="selectDeveloper('${dev.id}', '${escapeHtml(dev.name)}')">
+                    <i class="fas ${isSelected ? 'fa-check' : 'fa-handshake'}"></i>
+                    ${isSelected ? 'Selected' : 'Select Developer'}
+                </button>
+            </div>`;
+        }).join('');
+
+    } catch (e) {
+        container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-circle"></i><p>Could not load developers: ${e.message}</p></div>`;
+    }
 }
+
+function selectDeveloper(devId, devName) {
+    // Toggle: clicking the already-selected developer deselects them
+    if (selectedDeveloperId === devId) {
+        selectedDeveloperId = null;
+        const card = document.getElementById(`vendor-card-${devId}`);
+        if (card) {
+            card.classList.remove('vendor-selected');
+            const btn = card.querySelector('button');
+            if (btn) { btn.className = 'btn btn-primary'; btn.innerHTML = '<i class="fas fa-handshake"></i> Select Developer'; }
+        }
+        showToast('Developer Deselected', `${devName} removed from project`, 'info');
+        return;
+    }
+
+    // Deselect any previously selected developer
+    if (selectedDeveloperId) {
+        const prevCard = document.getElementById(`vendor-card-${selectedDeveloperId}`);
+        if (prevCard) {
+            prevCard.classList.remove('vendor-selected');
+            const btn = prevCard.querySelector('button');
+            if (btn) { btn.className = 'btn btn-primary'; btn.innerHTML = '<i class="fas fa-handshake"></i> Select Developer'; }
+        }
+    }
+
+    selectedDeveloperId = devId;
+    const card = document.getElementById(`vendor-card-${devId}`);
+    if (card) {
+        card.classList.add('vendor-selected');
+        const btn = card.querySelector('button');
+        if (btn) { btn.className = 'btn btn-success'; btn.innerHTML = '<i class="fas fa-check"></i> Selected'; }
+    }
+    showToast('Developer Selected', `${devName} will be assigned to your next project`, 'success');
+}
+
 
 // Helper function to safely parse JSON responses
 async function safeJsonParse(response) {
@@ -512,6 +688,11 @@ async function sendChatMessage() {
             updateCurrentMilestonesDisplay();
             document.getElementById('action-buttons').style.display = 'flex';
         }
+
+        // Capture project deadline if architect extracted one
+        if (data.project_deadline) {
+            currentProjectDeadline = data.project_deadline;
+        }
         
     } catch (error) {
         hideTypingIndicator();
@@ -561,13 +742,14 @@ function startNewConversation() {
     conversationHistory = [];
     currentMilestones = [];
     currentProjectId = null;
+    currentProjectDeadline = null;
     
     document.getElementById('chat-messages').innerHTML = '';
     document.getElementById('current-milestones').innerHTML = '';
     document.getElementById('action-buttons').style.display = 'none';
     document.getElementById('chat-input').value = '';
     
-    addChatMessage('assistant', 'Hello! I\'m the Architect Agent. Describe your project idea and I\'ll help you create a structured plan with milestones.');
+    addChatMessage('assistant', "Hi! I'm the Architect Agent. Before I can build your project plan, I need to understand exactly what you're building.\n\nDescribe your project idea and I'll ask the right questions to turn it into a precise technical checklist.");
 }
 
 async function finalizeChecklist() {
@@ -592,7 +774,9 @@ async function finalizeChecklist() {
             },
             body: JSON.stringify({
                 user_id: userId,
-                milestones: currentMilestones
+                milestones: currentMilestones,
+                developer_id: selectedDeveloperId || null,
+                project_deadline: currentProjectDeadline || null
             })
         });
         
@@ -790,9 +974,23 @@ function goBackToEdit() {
 }
 
 // Initialize on page load
+// Initialize on page load
 window.addEventListener('DOMContentLoaded', () => {
-    // Show role selection screen - do NOT auto-start conversation
-    document.getElementById('role-selection').style.display = 'flex';
+    // Check for saved session
+    const saved = localStorage.getItem('pillar_user');
+    if (saved) {
+        try {
+            const user = JSON.parse(saved);
+            currentUser = user;
+            enterApp(user);
+        } catch (e) {
+            localStorage.removeItem('pillar_user');
+        }
+    }
+
+    // Threshold hint live update
+    const thresholdInput = document.getElementById('reg-threshold');
+    if (thresholdInput) thresholdInput.addEventListener('input', updateThresholdHint);
 
     // Submit sub-tab switching
     document.querySelectorAll('.submit-tab-btn').forEach(btn => {

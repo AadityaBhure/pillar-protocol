@@ -50,24 +50,52 @@ Return ONLY a valid JSON array. No markdown, no explanation, no extra text.
   }
 ]"""
 
-_CHAT_SYSTEM = """You are a senior software engineer helping a developer plan their project milestones. You speak in technical terms only.
+_CHAT_SYSTEM = """You are a senior software architect helping a client plan a software project. The client may not be technical — your job is to ask simple, high-level questions about what they want to build, then translate their answers into a precise technical milestone checklist yourself.
 
-STRICT RULES FOR MILESTONES AND REQUIREMENTS:
-1. Milestone titles must name a concrete technical component or module.
-2. Requirements must be specific, code-verifiable deliverables — function names, class names, endpoint paths, DB schema, file names, library integrations.
-3. NEVER write: "user-friendly", "easy to use", "intuitive", "good UX/UI", "clean code", "best practices", "ensure security", "make it fast", or any vague/subjective term.
-4. Each requirement must be checkable by reading source code.
+## PHASE 1 — UNDERSTAND THE PROJECT (ask first, build later)
 
-Format your response EXACTLY as:
+When a client gives a vague description, ask 2-3 short, plain-English questions to understand:
+- What the product does and who uses it
+- The main features or screens they need
+- Any specific services they want (e.g. payments, maps, login with Google)
+- Their deadline — when do they need this done?
+
+Keep questions simple and friendly. Don't ask about tech stack, frameworks, or architecture — you will decide those yourself based on what they tell you.
+
+Example: if they say "I want a travel website", ask:
+- What can users do on it? (search flights, book hotels, share itineraries?)
+- Do they need accounts/login?
+- Any payment processing?
+- When do you need this ready?
+
+## PHASE 2 — GENERATE MILESTONES (once you understand the project)
+
+Once you have a clear picture of the features and deadline, generate the technical milestone checklist. You choose the tech stack and architecture — pick sensible modern defaults (e.g. React + FastAPI, or Next.js + Supabase) unless the client specified something.
+
+Rules for milestones:
+1. Titles name a concrete technical component (e.g. "User Auth API", "Flight Search Integration", "Booking Database Schema").
+2. Requirements are specific and code-verifiable — reference function names, endpoint paths, DB tables, library names, file names.
+3. No vague language: no "user-friendly", "clean code", "best practices", "ensure security", "make it fast".
+4. Hours should be realistic for a developer.
+5. Space milestones to fit within the client's deadline.
+
+## DEADLINE EXTRACTION
+When the client gives a deadline or timeframe, extract it as:
+<project_deadline>YYYY-MM-DDTHH:MM:SSZ</project_deadline>
+Convert relative dates ("2 weeks", "end of March") to absolute ISO 8601 UTC.
+
+## RESPONSE FORMAT
 <explanation>
-Technical explanation of your approach (concise, developer-to-developer tone)
+Your message to the client — questions, or a summary of what you're building before showing milestones
 </explanation>
 
+<project_deadline>ISO 8601 — only when client gave a deadline</project_deadline>
+
 <milestones>
-[JSON array — only include if generating or updating milestones]
+[JSON array — only when ready to generate]
 </milestones>
 
-Each milestone JSON object: { "id": "<uuid>", "title": "<string>", "description": "<string>", "requirements": ["<string>", ...], "estimated_hours": <int> }"""
+Each milestone: { "id": "<uuid>", "title": "<string>", "description": "<string>", "requirements": ["<string>", ...], "estimated_hours": <int> }"""
 
 
 class ArchitectAgent:
@@ -196,6 +224,14 @@ class ArchitectAgent:
         except Exception as e:
             raise ValueError(f"Failed to generate checklist: {e}")
 
+    def _extract_tag(self, text: str, tag: str) -> str:
+        """Extract content between <tag> and </tag>."""
+        open_tag = f"<{tag}>"
+        close_tag = f"</{tag}>"
+        if open_tag in text and close_tag in text:
+            return text[text.find(open_tag) + len(open_tag):text.find(close_tag)].strip()
+        return ""
+
     def chat_response(self, message: str, conversation_history: str = "",
                       current_milestones: List[dict] = None) -> dict:
         """Interactive chat for iterative milestone planning."""
@@ -207,50 +243,75 @@ class ArchitectAgent:
             user_content += f"Previous conversation:\n{conversation_history}\n\n"
         if current_milestones:
             user_content += f"Current milestones:\n{json.dumps(current_milestones, indent=2)}\n\n"
-        user_content += f"Developer message: {message}"
+        user_content += f"Client message: {message}"
 
         try:
             response_text = self._chat(_CHAT_SYSTEM, user_content)
 
-            explanation = ""
-            milestones = []
+            explanation = self._extract_tag(response_text, "explanation")
+            project_deadline = self._extract_tag(response_text, "project_deadline")
+            milestones_raw = self._extract_tag(response_text, "milestones")
 
-            if "<explanation>" in response_text and "</explanation>" in response_text:
-                explanation = response_text[
-                    response_text.find("<explanation>") + len("<explanation>"):
-                    response_text.find("</explanation>")
-                ].strip()
-
-                if "<milestones>" in response_text and "</milestones>" in response_text:
-                    milestones_json = response_text[
-                        response_text.find("<milestones>") + len("<milestones>"):
-                        response_text.find("</milestones>")
-                    ].strip()
-                    try:
-                        milestones = self._normalize_milestones(json.loads(milestones_json))
-                    except json.JSONDecodeError:
-                        pass
-            else:
+            # Fallback: if no tags, treat whole response as explanation
+            if not explanation:
                 explanation = response_text
+                # Try to pull out a JSON array if present
                 if '[' in response_text and ']' in response_text:
                     try:
                         s = response_text.find('[')
                         e = response_text.rfind(']') + 1
-                        milestones = self._normalize_milestones(json.loads(response_text[s:e]))
+                        milestones_raw = response_text[s:e]
                         explanation = response_text[:s].strip()
                     except Exception:
                         pass
 
-            return {
+            milestones = []
+            if milestones_raw:
+                try:
+                    milestones = self._normalize_milestones(json.loads(milestones_raw))
+                    # If client provided a project deadline, distribute milestones within it
+                    if project_deadline and milestones:
+                        milestones = self._distribute_deadlines(milestones, project_deadline)
+                except json.JSONDecodeError:
+                    pass
+
+            result = {
                 "response": explanation or "Understood. What would you like to adjust?",
                 "milestones": milestones
             }
+            if project_deadline:
+                result["project_deadline"] = project_deadline
+
+            return result
 
         except Exception as e:
             return {
                 "response": f"Error: {str(e)}. Please rephrase.",
                 "milestones": []
             }
+
+    def _distribute_deadlines(self, milestones: list, project_deadline: str) -> list:
+        """Distribute milestone deadlines evenly within the project deadline."""
+        try:
+            end_dt = datetime.fromisoformat(project_deadline.replace('Z', '+00:00')).replace(tzinfo=None)
+            now = datetime.utcnow()
+            total_hours = sum(m.get('estimated_hours', 1) for m in milestones)
+            total_duration = (end_dt - now).total_seconds() / 3600  # hours available
+
+            if total_duration <= 0:
+                return milestones  # deadline already passed, keep as-is
+
+            cumulative = 0
+            for m in milestones:
+                hours = m.get('estimated_hours', 1)
+                cumulative += hours
+                fraction = cumulative / total_hours
+                milestone_deadline = now + timedelta(hours=total_duration * fraction)
+                m['deadline'] = milestone_deadline.isoformat() + 'Z'
+            return milestones
+        except Exception as e:
+            logger.warning("Could not distribute deadlines: %s", e)
+            return milestones
 
     def _normalize_milestones(self, milestones: list) -> list:
         result = []

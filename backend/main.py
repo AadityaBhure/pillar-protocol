@@ -10,7 +10,7 @@ from typing import List
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.models import PlanRequest, PlanResponse, SubmitResponse, EscrowStatus
+from backend.models import PlanRequest, PlanResponse, SubmitResponse, EscrowStatus, RegisterRequest, LoginRequest, AuthResponse
 try:
     from backend.database import DatabaseManager
 except ImportError:
@@ -190,30 +190,52 @@ async def finalize_plan(request: dict):
     try:
         user_id = request.get("user_id")
         milestones = request.get("milestones", [])
-        
+        developer_id = request.get("developer_id")
+        project_deadline = request.get("project_deadline")  # overall project deadline from architect
+
         if not milestones:
             raise HTTPException(status_code=400, detail="No milestones to finalize")
-        
+
         # Extract title from first milestone
         title = milestones[0].get("title", "New Project")
         description = f"Project with {len(milestones)} milestones"
-        
+
+        # If a project-level deadline was provided and milestones don't have
+        # individually distributed deadlines yet, distribute them now
+        if project_deadline:
+            from datetime import datetime, timedelta
+            try:
+                end_dt = datetime.fromisoformat(project_deadline.replace('Z', '+00:00')).replace(tzinfo=None)
+                now = datetime.utcnow()
+                total_hours = sum(m.get("estimated_hours", 1) for m in milestones)
+                total_duration = (end_dt - now).total_seconds() / 3600
+                if total_duration > 0:
+                    cumulative = 0
+                    for m in milestones:
+                        hours = m.get("estimated_hours", 1)
+                        cumulative += hours
+                        fraction = cumulative / total_hours
+                        m["deadline"] = (now + timedelta(hours=total_duration * fraction)).isoformat() + 'Z'
+            except Exception as e:
+                logger.warning(f"Could not distribute deadlines from project_deadline: {e}")
+
         # Save to database
         project_id = db.create_project(
             user_id=user_id,
             title=title,
             description=description,
-            milestones=milestones
+            milestones=milestones,
+            developer_id=developer_id
         )
-        
-        logger.info(f"Finalized project {project_id}")
-        
+
+        logger.info(f"Finalized project {project_id}" + (f" assigned to dev {developer_id}" if developer_id else ""))
+
         return {
             "project_id": project_id,
             "status": "finalized",
             "milestones_count": len(milestones)
         }
-        
+
     except Exception as e:
         logger.error(f"Error in finalize_plan: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to finalize: {str(e)}")
@@ -935,6 +957,30 @@ async def get_all_projects():
         raise HTTPException(status_code=500, detail="Failed to retrieve projects")
 
 
+@app.get("/users/developers")
+async def get_all_developers():
+    """Get all registered developer accounts"""
+    try:
+        developers = db.get_all_developers()
+        return developers or []
+    except Exception as e:
+        logger.error(f"Error in get_all_developers: {e}")
+        # Return empty list instead of 500 — table may not exist yet
+        return []
+
+
+@app.get("/projects/developer/{developer_id}")
+async def get_projects_by_developer(developer_id: str):
+    """Get all projects assigned to a specific developer"""
+    try:
+        projects = db.get_projects_by_developer(developer_id)
+        return projects or []
+    except Exception as e:
+        logger.error(f"Error in get_projects_by_developer: {e}")
+        # Return empty list instead of 500 — column may not exist yet
+        return []
+
+
 @app.get("/projects/{user_id}")
 async def get_projects_by_user(user_id: str):
     """Get all projects for a given user ID"""
@@ -944,6 +990,78 @@ async def get_projects_by_user(user_id: str):
     except Exception as e:
         logger.error(f"Error in get_projects_by_user: {e}")
         raise HTTPException(status_code=500, detail="Failed to retrieve projects")
+
+
+# ============================================
+# AUTH ENDPOINTS
+# ============================================
+
+@app.post("/auth/register", response_model=AuthResponse)
+async def register(request: RegisterRequest):
+    """Register a new client or developer account"""
+    import hashlib, uuid as _uuid
+    existing = db.get_user_by_email(request.email)
+    if existing:
+        raise HTTPException(status_code=409, detail="Email already registered")
+
+    user_id = str(_uuid.uuid4())
+    password_hash = hashlib.sha256(request.password.encode()).hexdigest()
+
+    user = db.create_user(
+        user_id=user_id,
+        name=request.name,
+        email=request.email,
+        password_hash=password_hash,
+        role=request.role,
+        payment_threshold=request.payment_threshold if request.role == "developer" else None
+    )
+
+    return AuthResponse(
+        user_id=user["id"],
+        name=user["name"],
+        email=user["email"],
+        role=user["role"],
+        payment_threshold=user.get("payment_threshold"),
+        hourly_rate=user.get("hourly_rate")
+    )
+
+
+@app.post("/auth/login", response_model=AuthResponse)
+async def login(request: LoginRequest):
+    """Login with email and password"""
+    import hashlib
+    user = db.get_user_by_email(request.email)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    password_hash = hashlib.sha256(request.password.encode()).hexdigest()
+    if user["password_hash"] != password_hash:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    return AuthResponse(
+        user_id=user["id"],
+        name=user["name"],
+        email=user["email"],
+        role=user["role"],
+        payment_threshold=user.get("payment_threshold"),
+        hourly_rate=user.get("hourly_rate")
+    )
+
+
+@app.get("/auth/user/{user_id}", response_model=AuthResponse)
+async def get_user(user_id: str):
+    """Get user profile by ID"""
+    user = db.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return AuthResponse(
+        user_id=user["id"],
+        name=user["name"],
+        email=user["email"],
+        role=user["role"],
+        payment_threshold=user.get("payment_threshold"),
+        hourly_rate=user.get("hourly_rate")
+    )
 
 
 if __name__ == "__main__":
