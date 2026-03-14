@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pillar Protocol - AI Development Platform</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- ===================== ROLE SELECTION SCREEN ===================== -->
+    <div id="role-selection" class="role-screen">
+        <div class="role-hero">
+            <h1 class="role-logo">Pillar Protocol</h1>
+            <p class="role-tagline">AI-powered development escrow platform</p>
+        </div>
+        <div class="role-cards">
+            <div class="role-card" onclick="enterAs('client')">
+                <div class="role-icon"><i class="fas fa-briefcase"></i></div>
+                <h2>Sign in as Client</h2>
+                <p>Post projects, track milestones, manage payments and find top developers.</p>
+                <button class="btn btn-primary role-btn">Enter as Client</button>
+            </div>
+            <div class="role-card" onclick="enterAs('developer')">
+                <div class="role-icon"><i class="fas fa-code"></i></div>
+                <h2>Sign in as Developer</h2>
+                <p>Browse work, submit code for review, get paid and build your reputation.</p>
+                <button class="btn btn-secondary role-btn">Enter as Developer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== CLIENT APP ===================== -->
+    <div id="client-app" class="app-container" style="display:none;">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1 class="logo">Pillar</h1>
+                <p class="logo-subtitle">Protocol</p>
+            </div>
+            <nav class="sidebar-nav">
+                <button class="nav-item active" data-tab="c-dashboard">
+                    <i class="fas fa-th-large"></i><span>Dashboard</span>
+                </button>
+                <button class="nav-item" data-tab="c-plan">
+                    <i class="fas fa-compass"></i><span>Plan</span>
+                </button>
+                <button class="nav-item" data-tab="c-payment">
+                    <i class="fas fa-credit-card"></i><span>Payment</span>
+                </button>
+                <button class="nav-item" data-tab="c-vendors">
+                    <i class="fas fa-users"></i><span>Vendors</span>
+                </button>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="user-avatar"><i class="fas fa-briefcase"></i></div>
+                    <div class="user-details">
+                        <span class="role-label">Client</span>
+                        <input type="text" id="client-user-id" class="user-id-input" placeholder="User ID" value="client-demo-123">
+                    </div>
+                </div>
+                <button class="btn-switch-role" onclick="switchRole()">
+                    <i class="fas fa-exchange-alt"></i> Switch Role
+                </button>
+            </div>
+        </aside>
+
+        <main class="main-content">
+
+            <!-- CLIENT: Dashboard -->
+            <div class="tab-content active" id="c-dashboard-tab">
+                <div class="content-header">
+                    <div><h2>My Orders</h2><p class="text-muted">Track all your projects and milestones</p></div>
+                    <div style="display:flex;gap:8px;">
+                        <button class="btn btn-secondary" onclick="loadClientDashboard()">
+                            <i class="fas fa-sync"></i> Refresh
+                        </button>
+                        <button class="btn btn-primary" onclick="clientSwitchTab('c-plan')">
+                            <i class="fas fa-plus"></i> New Project
+                        </button>
+                    </div>
+                </div>
+                <div id="client-orders-list">
+                    <div class="empty-state">
+                        <i class="fas fa-folder-open"></i>
+                        <p>No projects yet. Start by creating a plan.</p>
+                        <button class="btn btn-primary" onclick="clientSwitchTab('c-plan')">Create Project</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CLIENT: Plan -->
+            <div class="tab-content" id="c-plan-tab">
+                <div class="content-header">
+                    <div><h2>Project Planning</h2><p class="text-muted">Collaborate with AI to structure your project</p></div>
+                    <button class="btn-icon" onclick="startNewConversation()" title="New Conversation">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </div>
+                <div class="chat-layout">
+                    <div class="chat-area">
+                        <div id="chat-messages" class="chat-messages"></div>
+                        <div id="typing-indicator" class="typing-indicator" style="display: none;">
+                            <div class="typing-dots"><span></span><span></span><span></span></div>
+                            <span class="typing-text">Architect Agent is thinking...</span>
+                        </div>
+                    </div>
+                    <div class="chat-input-container">
+                        <textarea id="chat-input" class="chat-input" rows="1" placeholder="Describe your project or request changes..."></textarea>
+                        <button class="btn-send" onclick="sendChatMessage()"><i class="fas fa-paper-plane"></i></button>
+                    </div>
+                    <div id="action-buttons" class="action-bar" style="display: none;">
+                        <button class="btn btn-success" onclick="finalizeChecklist()">
+                            <i class="fas fa-check"></i> Finalize Checklist
+                        </button>
+                        <button class="btn btn-secondary" onclick="showEstimatedPrice()">
+                            <i class="fas fa-dollar-sign"></i> Show Price
+                        </button>
+                    </div>
+                </div>
+                <div id="current-milestones" class="milestones-section"></div>
+            </div>
+
+            <!-- CLIENT: Payment -->
+            <div class="tab-content" id="c-payment-tab">
+                <div class="content-header">
+                    <div><h2>Payment</h2><p class="text-muted">Review and confirm your project payment</p></div>
+                </div>
+                <div id="payment-summary" class="payment-container"></div>
+                <div id="payment-gateway" class="payment-gateway" style="display: none;">
+                    <h3>Payment Gateway</h3>
+                    <div class="payment-form">
+                        <div class="form-group">
+                            <label>Card Number</label>
+                            <input type="text" class="form-input" placeholder="1234 5678 9012 3456" maxlength="19" id="card-number">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Expiry Date</label>
+                                <input type="text" class="form-input" placeholder="MM/YY" maxlength="5" id="card-expiry">
+                            </div>
+                            <div class="form-group">
+                                <label>CVV</label>
+                                <input type="text" class="form-input" placeholder="123" maxlength="3" id="card-cvv">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Cardholder Name</label>
+                            <input type="text" class="form-input" placeholder="John Doe" id="card-name">
+                        </div>
+                    </div>
+                </div>
+                <div class="action-bar">
+                    <button class="btn btn-success" onclick="confirmPayment()">
+                        <i class="fas fa-check-circle"></i> Confirm Payment
+                    </button>
+                    <button class="btn btn-secondary" onclick="goBackToEdit()">
+                        <i class="fas fa-arrow-left"></i> Back to Edit
+                    </button>
+                </div>
+                <div id="payment-result"></div>
+            </div>
+
+            <!-- CLIENT: Vendors -->
+            <div class="tab-content" id="c-vendors-tab">
+                <div class="content-header">
+                    <div><h2>Vendors</h2><p class="text-muted">Browse available developers and their reputation</p></div>
+                </div>
+                <div id="vendors-list" class="vendors-grid"></div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- ===================== DEVELOPER APP ===================== -->
+    <div id="developer-app" class="app-container" style="display:none;">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1 class="logo">Pillar</h1>
+                <p class="logo-subtitle">Protocol</p>
+            </div>
+            <nav class="sidebar-nav">
+                <button class="nav-item active" data-tab="d-dashboard">
+                    <i class="fas fa-th-large"></i><span>Dashboard</span>
+                </button>
+                <button class="nav-item" data-tab="d-submit">
+                    <i class="fas fa-code"></i><span>Submit</span>
+                </button>
+                <button class="nav-item" data-tab="d-projects">
+                    <i class="fas fa-folder-open"></i><span>Projects</span>
+                </button>
+                <button class="nav-item" data-tab="d-reputation">
+                    <i class="fas fa-star"></i><span>Reputation</span>
+                </button>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="user-avatar"><i class="fas fa-code"></i></div>
+                    <div class="user-details">
+                        <span class="role-label">Developer</span>
+                        <input type="text" id="dev-user-id" class="user-id-input" placeholder="User ID" value="dev-demo-123">
+                    </div>
+                </div>
+                <button class="btn-switch-role" onclick="switchRole()">
+                    <i class="fas fa-exchange-alt"></i> Switch Role
+                </button>
+            </div>
+        </aside>
+
+        <main class="main-content">
+
+            <!-- DEV: Dashboard -->
+            <div class="tab-content active" id="d-dashboard-tab">
+                <div class="content-header">
+                    <div><h2>My Work</h2><p class="text-muted">All assigned milestones and their status</p></div>
+                    <button class="btn btn-secondary" onclick="loadDevDashboard()">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                </div>
+                <div id="dev-work-list">
+                    <div class="empty-state">
+                        <i class="fas fa-tasks"></i>
+                        <p>Enter your User ID in the sidebar and click Refresh to load your work.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DEV: Submit -->
+            <div class="tab-content" id="d-submit-tab">
+                <div class="content-header">
+                    <div><h2>Submit Code</h2><p class="text-muted">Upload your code or fetch from GitHub for review</p></div>
+                </div>
+                <div class="form-container">
+                    <div class="form-group">
+                        <label>Project ID</label>
+                        <input type="text" id="submit-project-id" class="form-input" placeholder="Enter project ID">
+                        <button class="btn btn-secondary" style="margin-top: 8px;" onclick="loadProjectMilestones()">
+                            <i class="fas fa-sync"></i> Load Milestones
+                        </button>
+                    </div>
+                    <div id="milestone-selector" style="display: none; margin-bottom: 24px;">
+                        <label>Select Milestone</label>
+                        <div id="milestone-list" class="milestone-selector-list"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>Milestone ID</label>
+                        <input type="text" id="submit-milestone-id" class="form-input" placeholder="Enter milestone ID or select above">
+                    </div>
+                    <div class="submit-tabs">
+                        <button class="submit-tab-btn active" data-submit-tab="upload">
+                            <i class="fas fa-upload"></i> Upload Files
+                        </button>
+                        <button class="submit-tab-btn" data-submit-tab="github">
+                            <i class="fab fa-github"></i> Fetch from GitHub
+                        </button>
+                    </div>
+                    <div id="upload-section" class="submit-section active">
+                        <div class="form-group">
+                            <label>Code Files</label>
+                            <div class="file-upload-area">
+                                <input type="file" id="code-files" multiple accept=".py,.js,.ts,.java,.cpp,.c,.go,.rs,.jsx,.tsx,.html,.css" hidden>
+                                <button class="btn btn-secondary" onclick="document.getElementById('code-files').click()">
+                                    <i class="fas fa-upload"></i> Choose Files
+                                </button>
+                                <div id="file-list" class="file-list"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="github-section" class="submit-section">
+                        <div class="form-group">
+                            <label>GitHub Repository URL</label>
+                            <input type="text" id="github-repo" class="form-input" placeholder="https://github.com/username/repo">
+                        </div>
+                        <div class="form-group">
+                            <label>Branch (optional)</label>
+                            <input type="text" id="github-branch" class="form-input" placeholder="main" value="main">
+                        </div>
+                        <div class="form-group">
+                            <label>Path (optional)</label>
+                            <input type="text" id="github-path" class="form-input" placeholder="src/ (leave empty for root)">
+                        </div>
+                        <button class="btn btn-secondary" onclick="fetchFromGitHub()">
+                            <i class="fab fa-github"></i> Fetch Repository
+                        </button>
+                        <div id="github-status" class="status-message"></div>
+                    </div>
+                    <button class="btn btn-primary" onclick="submitCode()">
+                        <i class="fas fa-paper-plane"></i> Submit for Review
+                    </button>
+                    <div id="submit-result" class="result-container"></div>
+                    <div id="pfi-gauge-container" class="pfi-container" style="display: none;">
+                        <h3>Performance Score</h3>
+                        <div class="pfi-score-display">
+                            <div class="pfi-circle">
+                                <span id="pfi-score" class="pfi-number">0</span>
+                            </div>
+                            <p class="text-muted">Your reputation score</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DEV: Projects -->
+            <div class="tab-content" id="d-projects-tab">
+                <div class="content-header">
+                    <div><h2>Projects</h2><p class="text-muted">View and manage project details</p></div>
+                </div>
+                <div class="form-container">
+                    <div class="form-group">
+                        <label>Project ID</label>
+                        <div class="input-group">
+                            <input type="text" id="view-project-id" class="form-input" placeholder="Enter project ID">
+                            <button class="btn btn-primary" onclick="viewProject()">
+                                <i class="fas fa-search"></i> Load
+                            </button>
+                        </div>
+                    </div>
+                    <div id="project-result" class="result-container"></div>
+                </div>
+            </div>
+
+            <!-- DEV: Reputation -->
+            <div class="tab-content" id="d-reputation-tab">
+                <div class="content-header">
+                    <div><h2>My Reputation</h2><p class="text-muted">Your performance history and score</p></div>
+                </div>
+                <div class="form-container">
+                    <div class="form-group">
+                        <label>User ID</label>
+                        <div class="input-group">
+                            <input type="text" id="reputation-user-id" class="form-input" placeholder="Enter user ID" value="dev-demo-123">
+                            <button class="btn btn-primary" onclick="viewReputation()">
+                                <i class="fas fa-search"></i> Load
+                            </button>
+                        </div>
+                    </div>
+                    <div id="reputation-result" class="result-container"></div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading" class="loading-overlay" style="display: none;">
+        <div class="spinner"></div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="script.js"></script>
+</body>
+</html>

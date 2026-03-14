@@ -1,0 +1,9 @@
+{
+  "hours_to_days_ratio": 1.0,
+  "reputation_weights": {
+    "on_time_bonus": 2,
+    "late_penalty": 5,
+    "high_quality_bonus": 1,
+    "low_quality_penalty": 2
+  }
+}
