@@ -46,7 +46,7 @@ class DatabaseManager:
                 "title": milestone["title"],
                 "description": milestone["description"],
                 "requirements": milestone["requirements"],
-                "estimated_hours": milestone["estimated_hours"],
+                "estimated_hours": float(milestone["estimated_hours"]) if milestone.get("estimated_hours") is not None else None,
                 "status": "PENDING",
                 "deadline": milestone.get("deadline"),  # NEW: Include deadline if provided
                 "created_at": now
