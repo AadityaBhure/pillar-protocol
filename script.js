@@ -259,7 +259,9 @@ async function loadClientDashboard() {
                     <td colspan="5" style="color:var(--text-muted)">No milestones</td>
                 </tr>`;
             } else {
-                const rate = project.developer_hourly_rate || 4200;
+                const rate = project.developer_hourly_rate
+                    || Number(localStorage.getItem(`dev_rate_${project.id}`))
+                    || 4200;
                 milestones.forEach((m, i) => {
                     const statusClass = `status-${(m.status || 'pending').toLowerCase()}`;
                     const deadline = m.deadline ? new Date(m.deadline).toLocaleDateString() : '\u2014';
@@ -793,7 +795,11 @@ async function finalizeChecklist() {
         
         const data = await safeJsonParse(response);
         currentProjectId = data.project_id;
-        
+
+        // Persist the agreed rate so dashboards always show the correct cost
+        const rateKey = `dev_rate_${data.project_id}`;
+        localStorage.setItem(rateKey, String(selectedDeveloperRate || 4200));
+
         addChatMessage('assistant', `✅ Checklist finalized! Project ID: ${data.project_id}`);
         showToast('Success', 'Checklist finalized successfully!', 'success');
         
@@ -944,11 +950,8 @@ async function confirmPayment() {
                 <i class="fas fa-check-circle" style="font-size: 48px; margin-bottom: 16px;"></i>
                 <h3>Payment Successful!</h3>
                 <p>Transaction ID: <code>${data.transaction_id}</code></p>
-                <p>Amount: <strong>$${data.amount}</strong></p>
+                <p>Amount: <strong>&#8377;${Number(data.amount).toLocaleString('en-IN')}</strong></p>
                 <p style="margin-top: 16px;">All milestones are now locked and ready for code submission.</p>
-                <p style="margin-top: 12px; padding: 12px; background: rgba(29, 191, 115, 0.1); border-radius: 8px;">
-                    <strong>Next Step:</strong> Go to the Submit tab to upload your code or fetch from GitHub.
-                </p>
             </div>
         `;
         
@@ -957,9 +960,6 @@ async function confirmPayment() {
         if (currentMilestones.length > 0) {
             const firstMilestoneId = currentMilestones[0].id;
             document.getElementById('submit-milestone-id').value = firstMilestoneId;
-            
-            // Show helpful info
-            showToast('Ready to Submit', `Project ID and Milestone ID auto-filled in Submit tab`, 'info');
             
             console.log('Payment successful - IDs auto-filled:');
             console.log('Project ID:', currentProjectId);
