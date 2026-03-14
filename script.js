@@ -834,7 +834,7 @@ Ready to proceed to payment?
         `;
         
         addChatMessage('assistant', priceMessage);
-        showToast('Price Calculated', `Total: $${data.total_price}`, 'success');
+        showToast('Price Calculated', `Total: ₹${Number(data.total_price).toLocaleString('en-IN')}`, 'success');
         
         // Automatically go to payment
         setTimeout(() => goToPayment(), 1000);
@@ -860,7 +860,7 @@ function displayPaymentSummary() {
         <div class="payment-details">
             <p><strong>Project ID:</strong> <code>${currentProjectId}</code></p>
             <p><strong>Total Milestones:</strong> ${currentMilestones.length}</p>
-            <p><strong>Estimated Price:</strong> <span class="price-highlight">$${estimatedPrice}</span></p>
+            <p><strong>Estimated Price:</strong> <span class="price-highlight">₹${Number(estimatedPrice).toLocaleString('en-IN')}</span></p>
         </div>
         
         <h4>Milestones Breakdown:</h4>
