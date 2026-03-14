@@ -126,6 +126,7 @@ function enterApp(user) {
         loadClientDashboard();
         loadVendors();
         startNewConversation();
+        startPolling();
     } else {
         document.getElementById('dev-user-id').value = user.user_id;
         document.getElementById('dev-display-name').textContent = user.name;
@@ -144,10 +145,12 @@ function enterApp(user) {
         document.getElementById('developer-app').style.display = 'flex';
         setupNavForApp('developer-app');
         loadDevDashboard();
+        startPolling();
     }
 }
 
 function logout() {
+    stopPolling();
     localStorage.removeItem('pillar_user');
     currentUser = null;
     currentRole = null;
@@ -171,8 +174,45 @@ function devSwitchTab(tabName) {
 }
 
 // ============================================
-// ROLE SELECTION & NAVIGATION
+// AUTO-REFRESH / LIVE POLLING
 // ============================================
+
+let _pollInterval = null;
+let _pollTab = null;
+
+function _getActivePollFn() {
+    if (!currentUser) return null;
+    if (currentRole === 'client') {
+        const active = document.querySelector('#client-app .nav-item.active');
+        const tab = active && active.dataset.tab;
+        if (tab === 'c-dashboard') return loadClientDashboard;
+        if (tab === 'c-vendors') return loadVendors;
+    }
+    if (currentRole === 'developer') {
+        const active = document.querySelector('#developer-app .nav-item.active');
+        const tab = active && active.dataset.tab;
+        if (tab === 'd-dashboard') return loadDevDashboard;
+    }
+    return null;
+}
+
+function startPolling() {
+    stopPolling();
+    _pollInterval = setInterval(() => {
+        if (document.hidden) return; // don't poll when tab is backgrounded
+        const fn = _getActivePollFn();
+        if (fn) fn();
+    }, 15000); // every 15 seconds
+}
+
+function stopPolling() {
+    if (_pollInterval) { clearInterval(_pollInterval); _pollInterval = null; }
+}
+
+// Restart polling whenever the user switches tabs (so the 15s resets)
+function _onTabSwitch() { startPolling(); }
+
+
 
 function enterAs(role) { /* legacy stub — use enterApp() */ }
 
@@ -193,6 +233,7 @@ function setupNavForApp(appId) {
             if (tabName === 'c-dashboard') loadClientDashboard();
             if (tabName === 'c-vendors') loadVendors();
             if (tabName === 'd-dashboard') loadDevDashboard();
+            _onTabSwitch();
         });
     });
 }
