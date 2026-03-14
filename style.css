@@ -1722,3 +1722,16 @@ body {
 .payout-milestone-table tr:last-child td {
     border-bottom: none;
 }
+
+.payment-total-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 12px;
+    padding: 12px 16px;
+    background: rgba(29, 191, 115, 0.08);
+    border: 1px solid rgba(29, 191, 115, 0.25);
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 15px;
+}

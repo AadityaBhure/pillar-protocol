@@ -854,32 +854,43 @@ function goToPayment() {
 function displayPaymentSummary() {
     const summaryDiv = document.getElementById('payment-summary');
     const gatewayDiv = document.getElementById('payment-gateway');
-    
-    let html = `
-        <h3>Payment Summary</h3>
-        <div class="payment-details">
-            <p><strong>Project ID:</strong> <code>${currentProjectId}</code></p>
-            <p><strong>Total Milestones:</strong> ${currentMilestones.length}</p>
-            <p><strong>Estimated Price:</strong> <span class="price-highlight">₹${Number(estimatedPrice).toLocaleString('en-IN')}</span></p>
-        </div>
-        
-        <h4>Milestones Breakdown:</h4>
-    `;
-    
+
+    const hourlyRate = selectedDeveloperRate || 4200;
+
+    // Compute total directly from milestone breakdown so it always matches
+    let computedTotal = 0;
+    let breakdownHtml = '';
     currentMilestones.forEach((milestone, index) => {
-        const hourlyRate = selectedDeveloperRate || 4200;
         const milestonePrice = milestone.estimated_hours * hourlyRate;
-        html += `
+        computedTotal += milestonePrice;
+        breakdownHtml += `
             <div class="payment-milestone">
                 <div>${index + 1}. ${escapeHtml(milestone.title)}</div>
                 <div>${milestone.estimated_hours} hrs × ₹${Number(hourlyRate).toLocaleString('en-IN')} = ₹${Number(milestonePrice).toLocaleString('en-IN')}</div>
             </div>
         `;
     });
-    
-    summaryDiv.innerHTML = html;
+
+    // Keep estimatedPrice in sync so confirmPayment sends the right amount
+    estimatedPrice = computedTotal;
+
+    summaryDiv.innerHTML = `
+        <h3>Payment Summary</h3>
+        <div class="payment-details">
+            <p><strong>Project ID:</strong> <code>${currentProjectId}</code></p>
+            <p><strong>Total Milestones:</strong> ${currentMilestones.length}</p>
+            <p><strong>Rate:</strong> ₹${Number(hourlyRate).toLocaleString('en-IN')}/hr</p>
+        </div>
+        <h4>Milestones Breakdown:</h4>
+        ${breakdownHtml}
+        <div class="payment-total-row">
+            <span>Total</span>
+            <span class="price-highlight">₹${Number(computedTotal).toLocaleString('en-IN')}</span>
+        </div>
+    `;
+
     gatewayDiv.style.display = 'block';
-    
+
     // Auto-fill mock card details
     document.getElementById('card-number').value = '4532 1234 5678 9010';
     document.getElementById('card-expiry').value = '12/25';
