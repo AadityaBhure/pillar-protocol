@@ -360,10 +360,10 @@ async function loadDevDashboard() {
             html += `<div class="milestone-card" style="margin-bottom:16px;">
                 <div class="milestone-header">
                     <div class="milestone-title">${escapeHtml(project.title)}</div>
-                    <div style="text-align:right">
-                        <small style="color:var(--text-muted);display:block">ID: ${project.id.slice(0,8)}…</small>
-                        <small style="color:var(--accent-primary)">Client: ${escapeHtml(clientName)}</small>
-                    </div>
+                    <small style="color:var(--accent-primary)">Client: ${escapeHtml(clientName)}</small>
+                </div>
+                <div style="margin-bottom:10px;font-size:12px;color:var(--text-muted);word-break:break-all;">
+                    Project ID: <code style="user-select:all;font-size:11px;">${project.id}</code>
                 </div>`;
             milestones.forEach((m, i) => {
                 const statusClass = `status-${(m.status || 'pending').toLowerCase()}`;
