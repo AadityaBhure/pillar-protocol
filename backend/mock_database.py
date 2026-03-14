@@ -19,13 +19,21 @@ class MockDatabaseManager:
         """Create new project with milestones"""
         project_id = str(uuid.uuid4())
         now = datetime.utcnow().isoformat()
-        
+
+        # Snapshot the developer's hourly rate at project creation time
+        developer_hourly_rate = None
+        if developer_id:
+            dev = self.get_user_by_id(developer_id)
+            if dev:
+                developer_hourly_rate = dev.get("hourly_rate")
+
         self.projects[project_id] = {
             "id": project_id,
             "user_id": user_id,
             "title": title,
             "description": description,
             "assigned_developer_id": developer_id,
+            "developer_hourly_rate": developer_hourly_rate,
             "created_at": now,
             "updated_at": now,
             "milestones": []

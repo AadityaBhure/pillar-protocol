@@ -1,4 +1,4 @@
-// API Base URL - automatically detects environment
+﻿// API Base URL - automatically detects environment
 const API_BASE_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     ? 'http://localhost:8000' 
     : '';
@@ -144,6 +144,7 @@ function enterApp(user) {
         document.getElementById('developer-app').style.display = 'flex';
         setupNavForApp('developer-app');
         loadDevDashboard();
+        loadPayoutPage();
     }
 }
 
@@ -192,6 +193,7 @@ function setupNavForApp(appId) {
             if (tabName === 'c-dashboard') loadClientDashboard();
             if (tabName === 'c-vendors') loadVendors();
             if (tabName === 'd-dashboard') loadDevDashboard();
+            if (tabName === 'd-payout') loadPayoutPage();
         });
     });
 }
@@ -256,10 +258,11 @@ async function loadClientDashboard() {
                     <td colspan="5" style="color:var(--text-muted)">No milestones</td>
                 </tr>`;
             } else {
+                const rate = project.developer_hourly_rate || 4200;
                 milestones.forEach((m, i) => {
                     const statusClass = `status-${(m.status || 'pending').toLowerCase()}`;
                     const deadline = m.deadline ? new Date(m.deadline).toLocaleDateString() : '\u2014';
-                    const cost = m.estimated_hours ? `₹${(m.estimated_hours * 4200).toLocaleString('en-IN')}` : '\u2014';
+                    const cost = m.estimated_hours ? `₹${(m.estimated_hours * rate).toLocaleString('en-IN')}` : '\u2014';
                     let deliverableHtml = '<span style="color:var(--text-muted)">\u2014</span>';
                     if (m.status === 'RELEASED') {
                         if (m.submission_source === 'github' && m.submission_github_url) {
@@ -343,6 +346,8 @@ async function loadDevDashboard() {
             container.innerHTML = `<div class="empty-state"><i class="fas fa-tasks"></i><p>No projects assigned to you yet. Clients will hire you from the Vendors tab.</p></div>`;
             return;
         }
+
+        checkProjectCompletionNotifications(projects);
 
         const hourlyRate = currentUser.hourly_rate || 4200;
 
@@ -859,11 +864,12 @@ function displayPaymentSummary() {
     `;
     
     currentMilestones.forEach((milestone, index) => {
-        const milestonePrice = milestone.estimated_hours * 4200; // ?4200/hr default
+        const hourlyRate = (currentUser && currentUser.hourly_rate) || 4200;
+        const milestonePrice = milestone.estimated_hours * hourlyRate;
         html += `
             <div class="payment-milestone">
                 <div>${index + 1}. ${escapeHtml(milestone.title)}</div>
-                <div>${milestone.estimated_hours} hours × $50 = $${milestonePrice}</div>
+                <div>${milestone.estimated_hours} hrs × ₹${Number(hourlyRate).toLocaleString('en-IN')} = ₹${Number(milestonePrice).toLocaleString('en-IN')}</div>
             </div>
         `;
     });
@@ -1385,6 +1391,7 @@ async function submitCode() {
             // Refresh dashboards so client sees RELEASED and dev sees updated status
             loadDevDashboard();
             loadClientDashboard();
+            loadPayoutPage();
         } else {
             let html = `
                 <div class="error-message">
@@ -1840,3 +1847,121 @@ async function viewReputation() {
     }
 }
 
+
+// ============================================
+// PAYOUT PAGE
+// ============================================
+
+async function loadPayoutPage() {
+    const container = document.getElementById('payout-content');
+    if (!container) return;
+
+    const devId = currentUser && currentUser.user_id;
+    if (!devId) {
+        container.innerHTML = `<div class="empty-state"><i class="fas fa-user"></i><p>Please log in to view earnings.</p></div>`;
+        return;
+    }
+
+    container.innerHTML = `<div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading earnings...</p></div>`;
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/developer/${devId}/earnings`);
+        if (!res.ok) throw new Error('Failed to load earnings');
+        const data = await safeJsonParse(res);
+
+        if (!data.projects || data.projects.length === 0) {
+            container.innerHTML = `<div class="empty-state"><i class="fas fa-wallet"></i><p>No earnings yet. Complete milestones to see your payouts here.</p></div>`;
+            return;
+        }
+
+        const totalEarned = Number(data.total_earned).toLocaleString('en-IN');
+        const pendingCount = data.pending_milestones;
+        const completedProjects = data.completed_projects;
+
+        let html = `
+            <div class="payout-summary-grid">
+                <div class="payout-stat-card payout-stat-green">
+                    <div class="payout-stat-value">₹${totalEarned}</div>
+                    <div class="payout-stat-label">Total Earned</div>
+                </div>
+                <div class="payout-stat-card payout-stat-blue">
+                    <div class="payout-stat-value">${completedProjects}</div>
+                    <div class="payout-stat-label">Projects Completed</div>
+                </div>
+                <div class="payout-stat-card payout-stat-amber">
+                    <div class="payout-stat-value">${pendingCount}</div>
+                    <div class="payout-stat-label">Milestones Pending</div>
+                </div>
+            </div>
+        `;
+
+        data.projects.forEach(project => {
+            const projectEarned = Number(project.project_earned).toLocaleString('en-IN');
+            const completionPct = project.total_milestones > 0
+                ? Math.round((project.released_milestones / project.total_milestones) * 100)
+                : 0;
+            const completedBadge = project.all_completed
+                ? `<span class="status-badge status-released" style="margin-left:8px;"><i class="fas fa-check-circle"></i> Fully Paid</span>`
+                : `<span class="status-badge status-pending" style="margin-left:8px;">${project.released_milestones}/${project.total_milestones} done</span>`;
+
+            html += `
+                <div class="payout-project-card">
+                    <div class="payout-project-header">
+                        <div>
+                            <div class="payout-project-title">${escapeHtml(project.project_title)} ${completedBadge}</div>
+                            <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">
+                                Client: ${escapeHtml(project.client_name)} &nbsp;·&nbsp;
+                                Rate: ₹${Number(project.hourly_rate).toLocaleString('en-IN')}/hr
+                            </div>
+                        </div>
+                        <div class="payout-project-total">₹${projectEarned}</div>
+                    </div>
+                    <div class="payout-progress-bar">
+                        <div class="payout-progress-fill" style="width:${completionPct}%"></div>
+                    </div>
+                    <table class="payout-milestone-table">
+                        <thead><tr><th>Milestone</th><th>Hours</th><th>Status</th><th>Earned</th></tr></thead>
+                        <tbody>
+                            ${project.milestones.map(m => `
+                                <tr>
+                                    <td>${escapeHtml(m.title)}</td>
+                                    <td>${m.estimated_hours}h</td>
+                                    <td><span class="status-badge status-${(m.status || 'pending').toLowerCase()}">${m.status}</span></td>
+                                    <td style="font-weight:600;color:${m.status === 'RELEASED' ? 'var(--accent-green)' : 'var(--text-muted)'}">
+                                        ${m.status === 'RELEASED' ? '₹' + Number(m.earned).toLocaleString('en-IN') : '—'}
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        });
+
+        container.innerHTML = html;
+
+    } catch (e) {
+        container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-circle"></i><p>Could not load earnings: ${e.message}</p></div>`;
+    }
+}
+
+// Check if any project just became fully completed and notify
+function checkProjectCompletionNotifications(projects) {
+    if (!projects) return;
+    projects.forEach(project => {
+        const milestones = project.milestones || [];
+        if (milestones.length === 0) return;
+        const allDone = milestones.every(m => m.status === 'RELEASED');
+        if (allDone) {
+            const key = `notified_complete_${project.id}`;
+            if (!sessionStorage.getItem(key)) {
+                sessionStorage.setItem(key, '1');
+                showToast(
+                    '🎉 Project Complete!',
+                    `All milestones for "${project.title}" have been released. Full payment earned!`,
+                    'success'
+                );
+            }
+        }
+    });
+}

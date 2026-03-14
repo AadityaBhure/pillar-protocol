@@ -1593,3 +1593,132 @@ body {
     0%, 100% { opacity: 1; transform: scale(1); }
     50% { opacity: 0.4; transform: scale(0.7); }
 }
+
+.auth-cache-notice {
+    margin-top: 16px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.35);
+    text-align: center;
+    max-width: 360px;
+    line-height: 1.5;
+}
+.auth-cache-notice i {
+    margin-right: 4px;
+}
+.auth-cache-notice strong {
+    color: rgba(255, 255, 255, 0.55);
+    font-weight: 500;
+}
+
+/* ============================================
+   PAYOUT PAGE
+   ============================================ */
+
+.payout-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 28px;
+}
+
+.payout-stat-card {
+    padding: 20px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.03);
+    text-align: center;
+}
+
+.payout-stat-green { border-color: rgba(29,191,115,0.3); background: rgba(29,191,115,0.07); }
+.payout-stat-blue  { border-color: rgba(99,102,241,0.3); background: rgba(99,102,241,0.07); }
+.payout-stat-amber { border-color: rgba(245,158,11,0.3); background: rgba(245,158,11,0.07); }
+
+.payout-stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.payout-stat-green .payout-stat-value { color: var(--accent-green); }
+.payout-stat-blue  .payout-stat-value { color: #6366f1; }
+.payout-stat-amber .payout-stat-value { color: #f59e0b; }
+
+.payout-stat-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.payout-project-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+}
+
+.payout-project-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+    gap: 12px;
+}
+
+.payout-project-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.payout-project-total {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--accent-green);
+    white-space: nowrap;
+}
+
+.payout-progress-bar {
+    height: 4px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 2px;
+    margin-bottom: 16px;
+    overflow: hidden;
+}
+
+.payout-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-green), #6366f1);
+    border-radius: 2px;
+    transition: width 0.6s ease;
+}
+
+.payout-milestone-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.payout-milestone-table th {
+    text-align: left;
+    padding: 6px 8px;
+    color: var(--text-muted);
+    font-weight: 500;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.payout-milestone-table td {
+    padding: 8px 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    color: var(--text-secondary);
+}
+
+.payout-milestone-table tr:last-child td {
+    border-bottom: none;
+}

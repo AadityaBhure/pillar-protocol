@@ -81,6 +81,11 @@
                 <p class="auth-switch-hint">Already have an account? <a href="#" onclick="switchAuthTab('login')">Login</a></p>
             </div>
         </div>
+
+        <p class="auth-cache-notice">
+            <i class="fas fa-info-circle"></i>
+            If the page is stuck on a loading screen, try opening it in an <strong>incognito window</strong> or <strong>clear your browser cache</strong> — this is a local cache issue, not a backend problem.
+        </p>
     </div>
 
     <!-- ===================== CLIENT APP ===================== -->
@@ -261,6 +266,9 @@
                 <button class="nav-item" data-tab="d-submit">
                     <i class="fas fa-code"></i><span>Submit</span>
                 </button>
+                <button class="nav-item" data-tab="d-payout">
+                    <i class="fas fa-wallet"></i><span>Payout</span>
+                </button>
                 <button class="nav-item" data-tab="d-projects">
                     <i class="fas fa-folder-open"></i><span>Projects</span>
                 </button>
@@ -377,6 +385,19 @@
                             <p class="text-muted">Your reputation score</p>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- DEV: Payout -->
+            <div class="tab-content" id="d-payout-tab">
+                <div class="content-header">
+                    <div><h2>Payout</h2><p class="text-muted">Your earnings from completed milestones</p></div>
+                    <button class="btn btn-secondary" onclick="loadPayoutPage()">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                </div>
+                <div id="payout-content">
+                    <div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading earnings...</p></div>
                 </div>
             </div>
 

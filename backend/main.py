@@ -1,11 +1,13 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from dotenv import load_dotenv
 import os
 import sys
 import logging
-from typing import List
+import asyncio
+import json as _json
+from typing import List, Dict
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -73,6 +75,17 @@ bureau = BureauAgent(db_connection=db)
 # Create FastAPI app
 app = FastAPI(title="Pillar Protocol API", version="1.0.0")
 
+# SSE event queues: user_id -> list of asyncio.Queue
+_sse_queues: Dict[str, List[asyncio.Queue]] = {}
+
+def _push_event(user_id: str, event: dict):
+    """Push an event to all SSE connections for a given user."""
+    for q in _sse_queues.get(user_id, []):
+        try:
+            q.put_nowait(event)
+        except asyncio.QueueFull:
+            pass
+
 @app.on_event("startup")
 async def startup_check():
     if not GROQ_API_KEY:
@@ -93,10 +106,6 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 @app.get("/")
 async def root():
-    """Serve the main HTML page"""
-    index_path = os.path.join(BASE_DIR, "index.html")
-    if os.path.exists(index_path):
-        return FileResponse(index_path)
     return {"status": "ok", "message": "Pillar Protocol API is running"}
 
 
@@ -106,22 +115,36 @@ async def health():
     return {"status": "ok", "message": "Pillar Protocol API is running"}
 
 
-@app.get("/script.js")
-async def serve_script():
-    """Serve the JavaScript file"""
-    script_path = os.path.join(BASE_DIR, "script.js")
-    if os.path.exists(script_path):
-        return FileResponse(script_path, media_type="application/javascript")
-    raise HTTPException(status_code=404, detail="Script not found")
+@app.get("/events/{user_id}")
+async def sse_events(user_id: str, request: Request):
+    """Server-Sent Events stream for real-time dashboard updates."""
+    queue: asyncio.Queue = asyncio.Queue(maxsize=50)
+    _sse_queues.setdefault(user_id, []).append(queue)
 
+    async def event_generator():
+        try:
+            # Send a keep-alive comment immediately so the connection is confirmed
+            yield ": connected\n\n"
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=25)
+                    yield f"data: {_json.dumps(event)}\n\n"
+                except asyncio.TimeoutError:
+                    # Send a keep-alive ping every 25 s to prevent proxy timeouts
+                    yield ": ping\n\n"
+        finally:
+            _sse_queues.get(user_id, []).remove(queue) if queue in _sse_queues.get(user_id, []) else None
 
-@app.get("/style.css")
-async def serve_style():
-    """Serve the CSS file"""
-    style_path = os.path.join(BASE_DIR, "style.css")
-    if os.path.exists(style_path):
-        return FileResponse(style_path, media_type="text/css")
-    raise HTTPException(status_code=404, detail="Style not found")
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.post("/plan", response_model=PlanResponse)
@@ -252,8 +275,8 @@ async def get_estimate(project_id: str):
         # Calculate total hours
         total_hours = sum(m.get("estimated_hours", 0) for m in project["milestones"])
         
-        # Default hourly rate (INR)
-        hourly_rate = 4200
+        # Use the developer's snapshotted rate, fall back to 4200
+        hourly_rate = project.get("developer_hourly_rate") or 4200
         total_price = total_hours * hourly_rate
         
         return {
@@ -652,6 +675,14 @@ async def submit_code(
                 logger.info(f"Inspection PASSED - Milestone {milestone_id} released, PFI: {pfi_score}")
                 if reputation_change:
                     logger.info(f"Reputation change: {reputation_change}")
+
+                # Push real-time SSE event to the project owner (client)
+                _push_event(project["user_id"], {
+                    "type": "milestone_released",
+                    "project_id": project_id,
+                    "milestone_id": milestone_id,
+                    "milestone_title": milestone.get("title", ""),
+                })
             else:
                 # If failed, unlock milestone so developer can resubmit
                 db.update_milestone_status(milestone_id, EscrowStatus.PENDING.value)
@@ -944,6 +975,61 @@ async def download_milestone_files(milestone_id: str):
         media_type="application/zip",
         headers={"Content-Disposition": f"attachment; filename=milestone_{milestone_id[:8]}.zip"}
     )
+
+
+@app.get("/developer/{developer_id}/earnings")
+async def get_developer_earnings(developer_id: str):
+    """Get all released milestones and earnings summary for a developer"""
+    try:
+        projects = db.get_projects_by_developer(developer_id)
+        total_earned = 0.0
+        completed_projects = 0
+        pending_milestones = 0
+        earnings_by_project = []
+
+        for project in projects:
+            milestones = project.get("milestones", [])
+            rate = project.get("developer_hourly_rate") or 4200
+            released = [m for m in milestones if m.get("status") == "RELEASED"]
+            pending  = [m for m in milestones if m.get("status") != "RELEASED"]
+            project_earned = sum(m.get("estimated_hours", 0) * rate for m in released)
+            total_earned += project_earned
+            all_done = len(milestones) > 0 and len(pending) == 0
+            if all_done:
+                completed_projects += 1
+            pending_milestones += len(pending)
+
+            earnings_by_project.append({
+                "project_id": project["id"],
+                "project_title": project.get("title", "Untitled"),
+                "client_name": project.get("client_name", "Unknown"),
+                "hourly_rate": rate,
+                "total_milestones": len(milestones),
+                "released_milestones": len(released),
+                "all_completed": all_done,
+                "project_earned": project_earned,
+                "milestones": [
+                    {
+                        "id": m["id"],
+                        "title": m.get("title", ""),
+                        "estimated_hours": m.get("estimated_hours", 0),
+                        "status": m.get("status", "PENDING"),
+                        "earned": m.get("estimated_hours", 0) * rate if m.get("status") == "RELEASED" else 0,
+                    }
+                    for m in milestones
+                ],
+            })
+
+        return {
+            "developer_id": developer_id,
+            "total_earned": total_earned,
+            "completed_projects": completed_projects,
+            "pending_milestones": pending_milestones,
+            "projects": earnings_by_project,
+        }
+    except Exception as e:
+        logger.error(f"Error in get_developer_earnings: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve earnings")
 
 
 @app.get("/projects/all")
