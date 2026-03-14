@@ -785,7 +785,8 @@ async function finalizeChecklist() {
                 milestones: currentMilestones,
                 developer_id: selectedDeveloperId || null,
                 project_deadline: currentProjectDeadline || null,
-                project_title: (conversationHistory.find(m => m.role === 'user') || {}).content || null
+                project_title: (conversationHistory.find(m => m.role === 'user') || {}).content || null,
+                conversation_history: conversationHistory.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n\n')
             })
         });
         

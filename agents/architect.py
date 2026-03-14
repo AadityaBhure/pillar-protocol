@@ -205,6 +205,27 @@ class ArchitectAgent:
                 data['id'] = str(uuid.uuid4())
         return data
 
+    def generate_project_title(self, conversation_history: str, milestones: list) -> str:
+        """Analyse the conversation and milestones to produce a concise project title."""
+        milestone_titles = ", ".join(m.get("title", "") for m in milestones[:5])
+        user_prompt = (
+            f"Conversation so far:\n{conversation_history}\n\n"
+            f"Milestone titles: {milestone_titles}\n\n"
+            "Based on the above, produce a short project title (3-6 words max). "
+            "Return ONLY the title text, nothing else."
+        )
+        try:
+            title = self._chat(
+                "You are a project naming assistant. Given a conversation and milestone list, "
+                "return a concise, descriptive project title in 3-6 words. No quotes, no punctuation at the end.",
+                user_prompt
+            )
+            # Strip quotes/punctuation just in case
+            title = title.strip().strip('"\'').rstrip('.')
+            return title[:80] if title else "New Project"
+        except Exception:
+            return milestones[0].get("title", "New Project") if milestones else "New Project"
+
     def generate_checklist(self, prompt: str) -> List[dict]:
         """Convert a project description into technical, code-verifiable milestones."""
         try:

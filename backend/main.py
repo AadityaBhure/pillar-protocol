@@ -214,15 +214,19 @@ async def finalize_plan(request: dict):
         user_id = request.get("user_id")
         milestones = request.get("milestones", [])
         developer_id = request.get("developer_id")
-        project_deadline = request.get("project_deadline")  # overall project deadline from architect
+        project_deadline = request.get("project_deadline")
+        conversation_history = request.get("conversation_history", "")
+        project_title_hint = request.get("project_title")  # raw first prompt as fallback
 
         if not milestones:
             raise HTTPException(status_code=400, detail="No milestones to finalize")
 
-        # Use the user's original project description as title, fall back to first milestone title
-        raw_title = request.get("project_title") or milestones[0].get("title", "New Project")
-        # Truncate to a reasonable length
-        title = raw_title[:80] if len(raw_title) > 80 else raw_title
+        # Generate a smart title from the conversation + milestones
+        if conversation_history:
+            title = architect.generate_project_title(conversation_history, milestones)
+        else:
+            raw_title = project_title_hint or milestones[0].get("title", "New Project")
+            title = raw_title[:80]
         description = f"Project with {len(milestones)} milestones"
 
         # If a project-level deadline was provided and milestones don't have
