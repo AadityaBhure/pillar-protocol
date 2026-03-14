@@ -219,8 +219,10 @@ async def finalize_plan(request: dict):
         if not milestones:
             raise HTTPException(status_code=400, detail="No milestones to finalize")
 
-        # Extract title from first milestone
-        title = milestones[0].get("title", "New Project")
+        # Use the user's original project description as title, fall back to first milestone title
+        raw_title = request.get("project_title") or milestones[0].get("title", "New Project")
+        # Truncate to a reasonable length
+        title = raw_title[:80] if len(raw_title) > 80 else raw_title
         description = f"Project with {len(milestones)} milestones"
 
         # If a project-level deadline was provided and milestones don't have

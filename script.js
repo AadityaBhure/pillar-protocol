@@ -784,7 +784,8 @@ async function finalizeChecklist() {
                 user_id: userId,
                 milestones: currentMilestones,
                 developer_id: selectedDeveloperId || null,
-                project_deadline: currentProjectDeadline || null
+                project_deadline: currentProjectDeadline || null,
+                project_title: (conversationHistory.find(m => m.role === 'user') || {}).content || null
             })
         });
         
