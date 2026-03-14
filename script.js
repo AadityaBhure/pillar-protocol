@@ -195,6 +195,7 @@ function setupNavForApp(appId) {
             if (tabName === 'c-vendors') loadVendors();
             if (tabName === 'd-dashboard') loadDevDashboard();
             if (tabName === 'd-payout') loadPayoutPage();
+            if (tabName === 'd-messages') loadDevMessages();
         });
     });
 }
@@ -448,6 +449,10 @@ async function loadVendors() {
                     <i class="fas ${isSelected ? 'fa-check' : 'fa-handshake'}"></i>
                     ${isSelected ? 'Selected' : 'Select Developer'}
                 </button>
+                <button class="btn btn-secondary" style="margin-top:6px;width:100%;"
+                    onclick="openChatModal('${dev.id}', '${escapeHtml(dev.name)}')">
+                    <i class="fas fa-comments"></i> Chat
+                </button>
             </div>`;
         }).join('');
 
@@ -492,6 +497,136 @@ function selectDeveloper(devId, devName, devRate) {
     showToast('Developer Selected', `${devName} — ₹${Number(selectedDeveloperRate).toLocaleString('en-IN')}/hr`, 'success');
 }
 
+
+// ============================================
+// CLIENT <-> DEVELOPER CHAT
+// ============================================
+
+let _chatReceiverId = null;
+let _chatReceiverName = null;
+let _chatRoomId = null;
+
+function _buildRoomId(a, b) {
+    return [a, b].sort().join('_');
+}
+
+async function openChatModal(receiverId, receiverName) {
+    if (!currentUser) { showToast('Login required', 'Please log in first', 'warning'); return; }
+    _chatReceiverId = receiverId;
+    _chatReceiverName = receiverName;
+    _chatRoomId = _buildRoomId(currentUser.user_id, receiverId);
+
+    document.getElementById('chat-modal-title').textContent = `Chat with ${receiverName}`;
+    document.getElementById('chat-modal-subtitle').textContent = `Room: ${_chatRoomId.slice(0, 16)}…`;
+    document.getElementById('chat-modal-messages').innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:13px;">Loading…</div>';
+    document.getElementById('chat-modal').style.display = 'flex';
+
+    await _loadChatHistory(_chatRoomId);
+    _startChatPoll();
+}
+
+function closeChatModal() {
+    document.getElementById('chat-modal').style.display = 'none';
+    _stopChatPoll();
+    _chatReceiverId = null;
+    _chatRoomId = null;
+}
+
+async function _loadChatHistory(roomId) {
+    try {
+        const res = await fetch(`${API_BASE_URL}/chat/history/${roomId}`);
+        const msgs = await safeJsonParse(res);
+        _renderChatMessages(msgs);
+    } catch(e) {
+        document.getElementById('chat-modal-messages').innerHTML = `<div style="color:var(--error);font-size:13px;">${e.message}</div>`;
+    }
+}
+
+function _renderChatMessages(msgs) {
+    const container = document.getElementById('chat-modal-messages');
+    if (!msgs || msgs.length === 0) {
+        container.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:13px;">No messages yet. Say hello!</div>';
+        return;
+    }
+    container.innerHTML = msgs.map(m => {
+        const isMine = m.sender_id === currentUser.user_id;
+        return `<div style="display:flex;flex-direction:column;align-items:${isMine ? 'flex-end' : 'flex-start'};">
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">${escapeHtml(m.sender_name)}</div>
+            <div style="max-width:75%;padding:8px 12px;border-radius:${isMine ? '12px 12px 2px 12px' : '12px 12px 12px 2px'};
+                background:${isMine ? 'var(--accent-primary)' : 'rgba(255,255,255,0.07)'};
+                color:${isMine ? '#fff' : 'var(--text-primary)'};font-size:14px;word-break:break-word;">
+                ${escapeHtml(m.message)}
+            </div>
+        </div>`;
+    }).join('');
+    container.scrollTop = container.scrollHeight;
+}
+
+async function sendChatModalMessage() {
+    const input = document.getElementById('chat-modal-input');
+    const text = input.value.trim();
+    if (!text || !_chatReceiverId) return;
+    input.value = '';
+
+    try {
+        await fetch(`${API_BASE_URL}/chat/send`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sender_id:   currentUser.user_id,
+                sender_name: currentUser.name,
+                sender_role: currentUser.role,
+                receiver_id: _chatReceiverId,
+                message:     text
+            })
+        });
+        // Reload history to show the new message
+        await _loadChatHistory(_chatRoomId);
+    } catch(e) {
+        showToast('Send failed', e.message, 'error');
+    }
+}
+
+// Developer: load all chat rooms
+async function loadDevMessages() {
+    const container = document.getElementById('dev-messages-list');
+    if (!container || !currentUser) return;
+    container.innerHTML = '<div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading…</p></div>';
+    try {
+        const res = await fetch(`${API_BASE_URL}/chat/rooms/${currentUser.user_id}`);
+        const rooms = await safeJsonParse(res);
+        if (!rooms || rooms.length === 0) {
+            container.innerHTML = '<div class="empty-state"><i class="fas fa-comments"></i><p>No conversations yet.</p></div>';
+            return;
+        }
+        container.innerHTML = rooms.map(r => {
+            const otherId = r.room_id.replace(currentUser.user_id + '_', '').replace('_' + currentUser.user_id, '');
+            // Show the other party's name: if last message was from me, label as their role; otherwise use their name
+            const otherName = r.sender_id !== currentUser.user_id ? escapeHtml(r.sender_name) : 'Client';
+            return `<div class="milestone-card" style="cursor:pointer;margin-bottom:10px;" onclick="openChatModal('${otherId}','${otherName}')">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <span style="font-weight:600;"><i class="fas fa-user" style="margin-right:6px;color:var(--accent-primary)"></i>${otherName}</span>
+                    <small style="color:var(--text-muted)">${new Date(r.created_at).toLocaleDateString()}</small>
+                </div>
+                <div style="font-size:13px;color:var(--text-muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(r.message)}</div>
+            </div>`;
+        }).join('');
+    } catch(e) {
+        container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-circle"></i><p>${e.message}</p></div>`;
+    }
+}
+
+// Poll for new messages while chat modal is open
+let _chatPollInterval = null;
+function _startChatPoll() {
+    _stopChatPoll();
+    _chatPollInterval = setInterval(() => {
+        if (_chatRoomId) _loadChatHistory(_chatRoomId);
+    }, 3000);
+}
+function _stopChatPoll() {
+    if (_chatPollInterval) { clearInterval(_chatPollInterval); _chatPollInterval = null; }
+}
 
 // Helper function to safely parse JSON responses
 async function safeJsonParse(response) {

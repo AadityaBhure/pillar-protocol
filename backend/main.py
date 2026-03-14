@@ -1156,6 +1156,73 @@ async def get_user(user_id: str):
     )
 
 
+# ============================================
+# CHAT ENDPOINTS (client <-> developer)
+# ============================================
+
+@app.post("/chat/send")
+async def send_chat_message(request: dict):
+    """Send a message in a client-developer chat room."""
+    sender_id   = request.get("sender_id")
+    sender_name = request.get("sender_name", "Unknown")
+    sender_role = request.get("sender_role")          # 'client' | 'developer'
+    receiver_id = request.get("receiver_id")
+    message     = request.get("message", "").strip()
+
+    if not all([sender_id, sender_role, receiver_id, message]):
+        raise HTTPException(status_code=400, detail="Missing required fields")
+
+    # room_id is always sorted so both sides share the same room
+    room_id = "_".join(sorted([sender_id, receiver_id]))
+
+    row = {
+        "room_id":     room_id,
+        "sender_id":   sender_id,
+        "sender_name": sender_name,
+        "sender_role": sender_role,
+        "message":     message,
+    }
+    db.client.table("chat_messages").insert(row).execute()
+
+    # Push SSE event to both parties
+    event = {"type": "chat_message", "room_id": room_id,
+             "sender_id": sender_id, "sender_name": sender_name,
+             "sender_role": sender_role, "message": message}
+    _push_event(sender_id,   event)
+    _push_event(receiver_id, event)
+
+    return {"status": "sent", "room_id": room_id}
+
+
+@app.get("/chat/history/{room_id}")
+async def get_chat_history(room_id: str):
+    """Fetch all messages for a chat room, oldest first."""
+    response = db.client.table("chat_messages") \
+        .select("*") \
+        .eq("room_id", room_id) \
+        .order("created_at", desc=False) \
+        .execute()
+    return response.data or []
+
+
+@app.get("/chat/rooms/{user_id}")
+async def get_chat_rooms(user_id: str):
+    """Get all chat rooms (unique room_ids) for a user, with last message."""
+    # Fetch rooms where room_id contains the user_id (both orderings)
+    r1 = db.client.table("chat_messages") \
+        .select("room_id, sender_id, sender_name, sender_role, message, created_at") \
+        .like("room_id", f"%{user_id}%") \
+        .order("created_at", desc=True) \
+        .execute()
+    rows = r1.data or []
+    # Deduplicate: keep only the latest message per room
+    seen = {}
+    for row in rows:
+        if row["room_id"] not in seen:
+            seen[row["room_id"]] = row
+    return list(seen.values())
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
