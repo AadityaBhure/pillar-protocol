@@ -43,8 +43,8 @@ function updateThresholdHint() {
     const val = parseFloat(document.getElementById('reg-threshold').value);
     const hint = document.getElementById('threshold-hint');
     if (val > 0) {
-        const rate = (val / 160).toFixed(2);
-        hint.textContent = `Equivalent hourly rate: $${rate}/hr (threshold / 160 working hours)`;
+        const rate = (val / 160).toFixed(0);
+        hint.textContent = `Equivalent hourly rate: ₹${Number(rate).toLocaleString('en-IN')}/hr (threshold ÷ 160 working hours)`;
     } else {
         hint.textContent = '';
     }
@@ -138,8 +138,8 @@ function enterApp(user) {
         document.getElementById('profile-dev-id').textContent = user.user_id;
         document.getElementById('dev-profile-avatar').textContent = user.name.charAt(0).toUpperCase();
         if (user.payment_threshold) {
-            document.getElementById('profile-dev-threshold').textContent = `$${user.payment_threshold.toLocaleString()}/month`;
-            document.getElementById('profile-dev-rate').textContent = `$${user.hourly_rate}/hr`;
+            document.getElementById('profile-dev-threshold').textContent = `₹${Number(user.payment_threshold).toLocaleString('en-IN')} INR/month`;
+            document.getElementById('profile-dev-rate').textContent = `₹${Number(user.hourly_rate).toLocaleString('en-IN')}/hr`;
         }
         document.getElementById('developer-app').style.display = 'flex';
         setupNavForApp('developer-app');
@@ -260,7 +260,7 @@ async function loadClientDashboard() {
                 milestones.forEach((m, i) => {
                     const statusClass = `status-${(m.status || 'pending').toLowerCase()}`;
                     const deadline = m.deadline ? new Date(m.deadline).toLocaleDateString() : '\u2014';
-                    const cost = m.estimated_hours ? `$${m.estimated_hours * 50}` : '\u2014';
+                    const cost = m.estimated_hours ? `₹${(m.estimated_hours * 4200).toLocaleString('en-IN')}` : '\u2014';
                     let deliverableHtml = '<span style="color:var(--text-muted)">\u2014</span>';
                     if (m.status === 'RELEASED') {
                         if (m.submission_source === 'github' && m.submission_github_url) {
@@ -345,7 +345,7 @@ async function loadDevDashboard() {
             return;
         }
 
-        const hourlyRate = currentUser.hourly_rate || 50;
+        const hourlyRate = currentUser.hourly_rate || 4200;
 
         let html = '';
         projects.forEach(project => {
@@ -362,7 +362,7 @@ async function loadDevDashboard() {
             milestones.forEach((m, i) => {
                 const statusClass = `status-${(m.status || 'pending').toLowerCase()}`;
                 const canSubmit = m.status === 'PENDING';
-                const payment = m.estimated_hours ? `$${(m.estimated_hours * hourlyRate).toLocaleString()}` : '—';
+                const payment = m.estimated_hours ? `₹${(m.estimated_hours * hourlyRate).toLocaleString('en-IN')}` : '—';
                 const deadline = m.deadline ? new Date(m.deadline).toLocaleDateString() : '—';
                 html += `<div style="padding:10px 0; border-top:1px solid rgba(255,255,255,0.05);">
                     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
@@ -374,7 +374,7 @@ async function loadDevDashboard() {
                     </div>
                     <div style="display:flex;gap:16px;margin-top:4px;font-size:12px;color:var(--text-muted);">
                         <span><i class="fas fa-calendar"></i> ${deadline}</span>
-                        <span><i class="fas fa-dollar-sign"></i> ${payment}</span>
+                        <span><i class="fas fa-indian-rupee-sign"></i> ${payment}</span>
                         ${m.estimated_hours ? `<span><i class="fas fa-clock"></i> ${m.estimated_hours}h</span>` : ''}
                     </div>
                 </div>`;
@@ -427,15 +427,15 @@ async function loadVendors() {
 
         container.innerHTML = developers.map((dev, i) => {
             const initials = dev.name.split(' ').map(n => n[0]).join('').toUpperCase();
-            const rate = dev.hourly_rate ? `$${dev.hourly_rate}/hr` : 'Rate TBD';
+            const rate = dev.hourly_rate ? `₹${Number(dev.hourly_rate).toLocaleString('en-IN')}/hr` : 'Rate TBD';
             const isSelected = selectedDeveloperId === dev.id;
             return `
             <div class="vendor-card ${isSelected ? 'vendor-selected' : ''}" id="vendor-card-${dev.id}">
                 <div class="vendor-avatar" style="background:${colors[i % colors.length]}">${initials}</div>
                 <div class="vendor-name">${escapeHtml(dev.name)}</div>
                 <div class="vendor-meta">
-                    <span><i class="fas fa-dollar-sign"></i> ${rate}</span>
-                    ${dev.payment_threshold ? `<span><i class="fas fa-bullseye"></i> $${dev.payment_threshold.toLocaleString()}/mo</span>` : ''}
+                    <span><i class="fas fa-indian-rupee-sign"></i> ${rate}</span>
+                    ${dev.payment_threshold ? `<span><i class="fas fa-bullseye"></i> ₹${Number(dev.payment_threshold).toLocaleString('en-IN')}/mo</span>` : ''}
                 </div>
                 <button class="btn ${isSelected ? 'btn-success' : 'btn-primary'}" style="margin-top:12px;width:100%;"
                     onclick="selectDeveloper('${dev.id}', '${escapeHtml(dev.name)}')">
@@ -820,8 +820,8 @@ async function showEstimatedPrice() {
         const priceMessage = `
 💰 Estimated Price Breakdown:
 - Total Hours: ${data.total_hours}
-- Rate: $${data.hourly_rate}/hour
-- Total Price: $${data.total_price}
+- Rate: ₹${Number(data.hourly_rate).toLocaleString('en-IN')}/hr
+- Total Price: ₹${Number(data.total_price).toLocaleString('en-IN')} INR
 
 Ready to proceed to payment?
         `;
@@ -860,7 +860,7 @@ function displayPaymentSummary() {
     `;
     
     currentMilestones.forEach((milestone, index) => {
-        const milestonePrice = milestone.estimated_hours * 50; // $50/hour default
+        const milestonePrice = milestone.estimated_hours * 4200; // ?4200/hr default
         html += `
             <div class="payment-milestone">
                 <div>${index + 1}. ${escapeHtml(milestone.title)}</div>

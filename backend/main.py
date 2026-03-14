@@ -252,8 +252,8 @@ async def get_estimate(project_id: str):
         # Calculate total hours
         total_hours = sum(m.get("estimated_hours", 0) for m in project["milestones"])
         
-        # Default hourly rate
-        hourly_rate = 50
+        # Default hourly rate (INR)
+        hourly_rate = 4200
         total_price = total_hours * hourly_rate
         
         return {
