@@ -31,10 +31,7 @@ load_dotenv()
 # Initialize database
 SUPABASE_URL = os.getenv('SUPABASE_URL', '')
 SUPABASE_KEY = os.getenv('SUPABASE_KEY', '')
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY') or os.getenv('gemini_api_key')
-
-if not GEMINI_API_KEY:
-    raise ValueError("GEMINI_API_KEY not found in environment variables")
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY') or os.getenv('gemini_api_key') or ''
 
 # Initialize database (will use mock if Supabase not configured)
 db = None
@@ -57,8 +54,8 @@ except (ImportError, Exception) as e:
     db = MockDatabaseManager()
     logger.info("Using mock database for development")
 
-# Initialize agents
-architect = ArchitectAgent(gemini_api_key=GEMINI_API_KEY)
+# Initialize agents (deferred — will raise at request time if key missing)
+architect = ArchitectAgent(gemini_api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 # NEW: Initialize Reputation Manager
 from agents.reputation_manager import ReputationManager
@@ -67,11 +64,16 @@ reputation_manager = ReputationManager(db_connection=db)
 # Initialize Banker with Reputation Manager
 banker = BankerAgent(db_connection=db, reputation_manager=reputation_manager)
 
-inspector = InspectorAgent(gemini_api_key=GEMINI_API_KEY)
+inspector = InspectorAgent(gemini_api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 bureau = BureauAgent(db_connection=db)
 
 # Create FastAPI app
 app = FastAPI(title="Pillar Protocol API", version="1.0.0")
+
+@app.on_event("startup")
+async def startup_check():
+    if not GEMINI_API_KEY:
+        logger.error("GEMINI_API_KEY is not set. AI features will not work.")
 
 # Configure CORS
 app.add_middleware(
