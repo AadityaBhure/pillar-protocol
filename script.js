@@ -18,6 +18,7 @@ let currentUser = null;
 
 // Selected developer (set from Vendors tab)
 let selectedDeveloperId = null;
+let selectedDeveloperRate = 4200; // default, updated when developer is selected
 
 // ============================================
 // AUTH FUNCTIONS
@@ -442,7 +443,7 @@ async function loadVendors() {
                     ${dev.payment_threshold ? `<span><i class="fas fa-bullseye"></i> ₹${Number(dev.payment_threshold).toLocaleString('en-IN')}/mo</span>` : ''}
                 </div>
                 <button class="btn ${isSelected ? 'btn-success' : 'btn-primary'}" style="margin-top:12px;width:100%;"
-                    onclick="selectDeveloper('${dev.id}', '${escapeHtml(dev.name)}')">
+                    onclick="selectDeveloper('${dev.id}', '${escapeHtml(dev.name)}', ${dev.hourly_rate || 4200})">
                     <i class="fas ${isSelected ? 'fa-check' : 'fa-handshake'}"></i>
                     ${isSelected ? 'Selected' : 'Select Developer'}
                 </button>
@@ -454,10 +455,11 @@ async function loadVendors() {
     }
 }
 
-function selectDeveloper(devId, devName) {
+function selectDeveloper(devId, devName, devRate) {
     // Toggle: clicking the already-selected developer deselects them
     if (selectedDeveloperId === devId) {
         selectedDeveloperId = null;
+        selectedDeveloperRate = 4200;
         const card = document.getElementById(`vendor-card-${devId}`);
         if (card) {
             card.classList.remove('vendor-selected');
@@ -479,13 +481,14 @@ function selectDeveloper(devId, devName) {
     }
 
     selectedDeveloperId = devId;
+    selectedDeveloperRate = devRate || 4200;
     const card = document.getElementById(`vendor-card-${devId}`);
     if (card) {
         card.classList.add('vendor-selected');
         const btn = card.querySelector('button');
         if (btn) { btn.className = 'btn btn-success'; btn.innerHTML = '<i class="fas fa-check"></i> Selected'; }
     }
-    showToast('Developer Selected', `${devName} will be assigned to your next project`, 'success');
+    showToast('Developer Selected', `${devName} — ₹${Number(selectedDeveloperRate).toLocaleString('en-IN')}/hr`, 'success');
 }
 
 
@@ -864,7 +867,7 @@ function displayPaymentSummary() {
     `;
     
     currentMilestones.forEach((milestone, index) => {
-        const hourlyRate = (currentUser && currentUser.hourly_rate) || 4200;
+        const hourlyRate = selectedDeveloperRate || 4200;
         const milestonePrice = milestone.estimated_hours * hourlyRate;
         html += `
             <div class="payment-milestone">

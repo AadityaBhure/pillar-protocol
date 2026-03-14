@@ -19,13 +19,24 @@ _VAGUE_PATTERNS = re.compile(
 
 _GENERATE_CHECKLIST_SYSTEM = """You are a senior software engineer breaking a project into implementation milestones for a developer freelance platform. Your output will be used to verify actual code submissions.
 
-STRICT RULES:
-1. Every milestone title must name a concrete technical component (e.g. "Implement JWT Authentication API", "Build PostgreSQL Schema & Migrations", "Create React Dashboard Component").
+MILESTONE COUNT RULES — follow strictly:
+- Trivial project (total work < 2 hours, e.g. a single function, script, or utility): 1 milestone only.
+- Small project (2–8 hours total): 2–3 milestones max.
+- Medium project (8–40 hours): 3–6 milestones.
+- Large project (40+ hours): up to 10 milestones.
+- NEVER create more milestones than the work justifies. A "subtraction of two numbers" is 1 milestone of 0.5 hours.
+
+HOURS RULES:
+- estimated_hours can be a decimal (0.5, 1.5, 2.5) for small tasks.
+- Minimum is 0.5 hours. Do NOT round everything up to 1.
+- Be realistic: a simple CRUD endpoint is 1–2h, a full auth system is 4–8h, a React dashboard is 6–12h.
+
+STRICT CONTENT RULES:
+1. Every milestone title must name a concrete technical component (e.g. "Implement JWT Authentication API", "Build PostgreSQL Schema", "Create React Dashboard Component").
 2. Every requirement must be a specific, code-verifiable deliverable — something an automated code reviewer can check by reading the source files.
 3. Requirements MUST reference: function/method names, class names, API endpoint paths, database table/column names, file names, library names, or specific algorithms.
 4. FORBIDDEN in requirements: "user-friendly", "easy to use", "intuitive", "good UX", "clean code", "best practices", "ensure security", "make it fast", or any subjective/non-code term.
 5. Each milestone must represent a distinct, independently deliverable code module.
-6. estimated_hours must be a realistic integer for a developer (not a project manager).
 
 REQUIREMENT FORMAT — each item must follow one of these patterns:
 - "Implement <FunctionName>() in <FileName> that <does specific thing>"
@@ -46,7 +57,7 @@ Return ONLY a valid JSON array. No markdown, no explanation, no extra text.
       "<specific code-verifiable deliverable>",
       "<specific code-verifiable deliverable>"
     ],
-    "estimated_hours": <integer>
+    "estimated_hours": <number>
   }
 ]"""
 
@@ -76,8 +87,9 @@ Rules for milestones:
 1. Titles name a concrete technical component (e.g. "User Auth API", "Flight Search Integration", "Booking Database Schema").
 2. Requirements are specific and code-verifiable — reference function names, endpoint paths, DB tables, library names, file names.
 3. No vague language: no "user-friendly", "clean code", "best practices", "ensure security", "make it fast".
-4. Hours should be realistic for a developer.
-5. Space milestones to fit within the client's deadline.
+4. Hours should be realistic — decimals allowed (0.5, 1.5). Minimum 0.5h. Don't pad trivial tasks.
+5. Milestone count must match project complexity: trivial = 1 milestone, small = 2-3, medium = 4-6, large = up to 10.
+6. Space milestones to fit within the client's deadline.
 
 ## DEADLINE EXTRACTION
 When the client gives a deadline or timeframe, extract it as:
@@ -167,19 +179,19 @@ class ArchitectAgent:
             return False
         if not isinstance(data['requirements'], list) or not data['requirements']:
             return False
-        if not isinstance(data['estimated_hours'], int) or data['estimated_hours'] <= 0:
+        if not isinstance(data['estimated_hours'], (int, float)) or data['estimated_hours'] <= 0:
             return False
         return True
 
     def _normalize_hours(self, data: dict) -> dict:
         h = data.get('estimated_hours', 1)
-        if isinstance(h, float):
-            data['estimated_hours'] = max(1, int(round(h)))
-        elif isinstance(h, str):
-            try:
-                data['estimated_hours'] = max(1, int(float(h)))
-            except ValueError:
-                data['estimated_hours'] = 1
+        try:
+            h = float(h)
+        except (ValueError, TypeError):
+            h = 1.0
+        # Allow decimals, minimum 0.5h
+        h = max(0.5, round(h * 2) / 2)  # round to nearest 0.5
+        data['estimated_hours'] = h
         return data
 
     def _ensure_uuid(self, data: dict) -> dict:
