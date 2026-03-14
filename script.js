@@ -350,12 +350,11 @@ async function loadDevDashboard() {
 
         checkProjectCompletionNotifications(projects);
 
-        const hourlyRate = currentUser.hourly_rate || 4200;
-
         let html = '';
         projects.forEach(project => {
             const milestones = project.milestones || [];
             const clientName = project.client_name || project.user_id;
+            const hourlyRate = project.developer_hourly_rate || currentUser.hourly_rate || 4200;
             html += `<div class="milestone-card" style="margin-bottom:16px;">
                 <div class="milestone-header">
                     <div class="milestone-title">${escapeHtml(project.title)}</div>
