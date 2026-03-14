@@ -4,14 +4,75 @@ import uuid
 from typing import List
 from datetime import datetime, timedelta
 import logging
+import re
 
 logger = logging.getLogger(__name__)
+
+# Words that indicate a requirement is NOT code-verifiable
+_VAGUE_PATTERNS = re.compile(
+    r'\b(user.friendly|easy to use|intuitive|seamless|beautiful|nice|clean|'
+    r'good (ux|ui|experience|performance|design)|fast|secure system|'
+    r'scalable|maintainable|readable|well.documented|best practices|'
+    r'ensure|make sure|should be|must be (easy|simple|fast|secure))\b',
+    re.IGNORECASE
+)
+
+_GENERATE_CHECKLIST_SYSTEM = """You are a senior software engineer breaking a project into implementation milestones for a developer freelance platform. Your output will be used to verify actual code submissions.
+
+STRICT RULES:
+1. Every milestone title must name a concrete technical component (e.g. "Implement JWT Authentication API", "Build PostgreSQL Schema & Migrations", "Create React Dashboard Component").
+2. Every requirement must be a specific, code-verifiable deliverable — something an automated code reviewer can check by reading the source files.
+3. Requirements MUST reference: function/method names, class names, API endpoint paths, database table/column names, file names, library names, or specific algorithms.
+4. FORBIDDEN in requirements: "user-friendly", "easy to use", "intuitive", "good UX", "clean code", "best practices", "ensure security", "make it fast", or any subjective/non-code term.
+5. Each milestone must represent a distinct, independently deliverable code module.
+6. estimated_hours must be a realistic integer for a developer (not a project manager).
+
+REQUIREMENT FORMAT — each item must follow one of these patterns:
+- "Implement <FunctionName>() in <FileName> that <does specific thing>"
+- "Create <ClassName> with methods: <method1>, <method2>"
+- "Add <HTTP_METHOD> /<endpoint> endpoint that accepts <input> and returns <output>"
+- "Create database migration adding <table>(<col1> <type>, <col2> <type>)"
+- "Write unit tests for <function/class> covering <specific cases>"
+- "Integrate <LibraryName> for <specific purpose> with config in <file>"
+
+Return ONLY a valid JSON array. No markdown, no explanation, no extra text.
+
+[
+  {
+    "id": "<uuid>",
+    "title": "<Technical Component Name>",
+    "description": "<What gets built and how — implementation details only>",
+    "requirements": [
+      "<specific code-verifiable deliverable>",
+      "<specific code-verifiable deliverable>"
+    ],
+    "estimated_hours": <integer>
+  }
+]"""
+
+_CHAT_SYSTEM = """You are a senior software engineer helping a developer plan their project milestones. You speak in technical terms only.
+
+STRICT RULES FOR MILESTONES AND REQUIREMENTS:
+1. Milestone titles must name a concrete technical component or module.
+2. Requirements must be specific, code-verifiable deliverables — function names, class names, endpoint paths, DB schema, file names, library integrations.
+3. NEVER write: "user-friendly", "easy to use", "intuitive", "good UX/UI", "clean code", "best practices", "ensure security", "make it fast", or any vague/subjective term.
+4. Each requirement must be checkable by reading source code.
+
+Format your response EXACTLY as:
+<explanation>
+Technical explanation of your approach (concise, developer-to-developer tone)
+</explanation>
+
+<milestones>
+[JSON array — only include if generating or updating milestones]
+</milestones>
+
+Each milestone JSON object: { "id": "<uuid>", "title": "<string>", "description": "<string>", "requirements": ["<string>", ...], "estimated_hours": <int> }"""
 
 
 class ArchitectAgent:
     def __init__(self, gemini_api_key: str = None, groq_api_key: str = None):
-        """Initialize with Groq API credentials"""
-        api_key = groq_api_key or gemini_api_key  # accept either param name
+        api_key = groq_api_key or gemini_api_key
         self.client = Groq(api_key=api_key)
         self.model = "llama-3.3-70b-versatile"
         self.config = self._load_deadline_config()
@@ -19,135 +80,59 @@ class ArchitectAgent:
     def _load_deadline_config(self) -> dict:
         try:
             with open('deadline_config.json', 'r') as f:
-                config = json.load(f)
-                logger.info("Loaded deadline_config.json successfully")
-                return config
-        except FileNotFoundError:
-            logger.warning("deadline_config.json not found, using defaults")
-        except json.JSONDecodeError as e:
-            logger.error("Invalid JSON in deadline_config.json: %s, using defaults", e)
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logger.warning("deadline_config.json issue (%s), using defaults", e)
         return {
             'hours_to_days_ratio': 1.0,
             'reputation_weights': {
-                'on_time_bonus': 2,
-                'late_penalty': 5,
-                'high_quality_bonus': 1,
-                'low_quality_penalty': 2
+                'on_time_bonus': 2, 'late_penalty': 5,
+                'high_quality_bonus': 1, 'low_quality_penalty': 2
             }
         }
 
     def _calculate_deadline(self, estimated_hours: int) -> str:
         ratio = self.config.get('hours_to_days_ratio', 1.0)
         days = estimated_hours * ratio
-        deadline_dt = datetime.utcnow() + timedelta(days=days)
-        deadline_str = deadline_dt.isoformat() + 'Z'
-        logger.info(
-            "Calculated deadline: %d hours * %.2f ratio = %.2f days -> %s",
-            estimated_hours, ratio, days, deadline_str
-        )
-        return deadline_str
+        return (datetime.utcnow() + timedelta(days=days)).isoformat() + 'Z'
 
     def _chat(self, system: str, user: str) -> str:
-        """Single helper to call Groq chat completions"""
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
-            temperature=0.3,
+            temperature=0.2,
         )
         return response.choices[0].message.content.strip()
 
-    def generate_checklist(self, prompt: str) -> List[dict]:
-        """Convert vague prompt into structured milestone list."""
-        system_prompt = """You are a technical project planning AI for developers. Convert the user's project idea into a JSON array of developer-focused milestones that can be verified against actual code.
-
-Each milestone must have:
-- id: unique identifier (generate a UUID-like string)
-- title: technical task name (max 200 chars)
-- description: technical implementation details
-- requirements: list of SPECIFIC, VERIFIABLE technical deliverables checkable in code
-- estimated_hours: integer estimate (must be positive)
-
-Return ONLY valid JSON array, no additional text or markdown formatting.
-
-Example format:
-[
-  {
-    "id": "milestone-1",
-    "title": "Setup Authentication System",
-    "description": "Implement JWT-based authentication with user registration and login endpoints",
-    "requirements": [
-      "Create User model with email, password_hash, created_at fields",
-      "Implement POST /api/register endpoint with email validation",
-      "Implement POST /api/login endpoint returning JWT token",
-      "Add password hashing using bcrypt with salt rounds >= 10"
-    ],
-    "estimated_hours": 8
-  }
-]"""
-
-        try:
-            raw_json = self._chat(system_prompt, f"User prompt: {prompt}")
-
-            if raw_json.startswith('```'):
-                raw_json = self._extract_json_from_markdown(raw_json)
-
-            milestones_data = json.loads(raw_json)
-
-            validated_milestones = []
-            for data in milestones_data:
-                if not self._validate_milestone_schema(data):
-                    continue
-
-                if 'id' not in data or not data['id'] or len(str(data['id'])) < 10:
-                    data['id'] = str(uuid.uuid4())
-                else:
-                    try:
-                        uuid.UUID(str(data['id']))
-                    except (ValueError, AttributeError):
-                        data['id'] = str(uuid.uuid4())
-
-                if 'estimated_hours' in data:
-                    if isinstance(data['estimated_hours'], float):
-                        data['estimated_hours'] = int(round(data['estimated_hours']))
-                    elif isinstance(data['estimated_hours'], str):
-                        try:
-                            data['estimated_hours'] = int(float(data['estimated_hours']))
-                        except ValueError:
-                            data['estimated_hours'] = 1
-
-                validated_milestones.append(data)
-
-            if not validated_milestones:
-                raise ValueError("No valid milestones generated")
-
-            for milestone in validated_milestones:
-                milestone['deadline'] = self._calculate_deadline(milestone['estimated_hours'])
-
-            return validated_milestones
-
-        except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON from Groq: {e}")
-        except Exception as e:
-            raise ValueError(f"Failed to generate checklist: {e}")
+    def _scrub_requirements(self, requirements: list) -> list:
+        """Remove or flag requirements that contain vague/non-technical language."""
+        clean = []
+        for req in requirements:
+            if _VAGUE_PATTERNS.search(req):
+                logger.warning("Dropping vague requirement: %s", req)
+                continue
+            if len(req.strip()) < 15:
+                continue
+            clean.append(req)
+        # If scrubbing removed everything, keep originals (better than empty)
+        return clean if clean else requirements
 
     def _extract_json_from_markdown(self, text: str) -> str:
         lines = text.split('\n')
-        json_lines = []
-        in_code_block = False
+        json_lines, in_block = [], False
         for line in lines:
             if line.strip().startswith('```'):
-                in_code_block = not in_code_block
+                in_block = not in_block
                 continue
-            if in_code_block or (not line.strip().startswith('```') and json_lines):
+            if in_block or (not line.strip().startswith('```') and json_lines):
                 json_lines.append(line)
         return '\n'.join(json_lines).strip()
 
     def _validate_milestone_schema(self, data: dict) -> bool:
-        required_fields = ['title', 'description', 'requirements', 'estimated_hours']
-        for field in required_fields:
+        for field in ['title', 'description', 'requirements', 'estimated_hours']:
             if field not in data:
                 return False
         if not isinstance(data['title'], str) or not data['title']:
@@ -158,35 +143,74 @@ Example format:
             return False
         return True
 
-    def chat_response(self, message: str, conversation_history: str = "", current_milestones: List[dict] = None) -> dict:
-        """Interactive chat response for iterative milestone planning."""
+    def _normalize_hours(self, data: dict) -> dict:
+        h = data.get('estimated_hours', 1)
+        if isinstance(h, float):
+            data['estimated_hours'] = max(1, int(round(h)))
+        elif isinstance(h, str):
+            try:
+                data['estimated_hours'] = max(1, int(float(h)))
+            except ValueError:
+                data['estimated_hours'] = 1
+        return data
+
+    def _ensure_uuid(self, data: dict) -> dict:
+        mid = data.get('id', '')
+        if not mid or len(str(mid)) < 10:
+            data['id'] = str(uuid.uuid4())
+        else:
+            try:
+                uuid.UUID(str(mid))
+            except (ValueError, AttributeError):
+                data['id'] = str(uuid.uuid4())
+        return data
+
+    def generate_checklist(self, prompt: str) -> List[dict]:
+        """Convert a project description into technical, code-verifiable milestones."""
+        try:
+            raw = self._chat(_GENERATE_CHECKLIST_SYSTEM, f"Project description: {prompt}")
+
+            if raw.startswith('```'):
+                raw = self._extract_json_from_markdown(raw)
+
+            milestones_data = json.loads(raw)
+
+            validated = []
+            for data in milestones_data:
+                data = self._normalize_hours(data)
+                if not self._validate_milestone_schema(data):
+                    logger.warning("Skipping invalid milestone schema: %s", data.get('title'))
+                    continue
+                data = self._ensure_uuid(data)
+                data['requirements'] = self._scrub_requirements(data['requirements'])
+                data['deadline'] = self._calculate_deadline(data['estimated_hours'])
+                validated.append(data)
+
+            if not validated:
+                raise ValueError("No valid milestones generated")
+
+            return validated
+
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON from Groq: {e}")
+        except Exception as e:
+            raise ValueError(f"Failed to generate checklist: {e}")
+
+    def chat_response(self, message: str, conversation_history: str = "",
+                      current_milestones: List[dict] = None) -> dict:
+        """Interactive chat for iterative milestone planning."""
         if current_milestones is None:
             current_milestones = []
-
-        system_prompt = """You are a technical project planning AI assistant for developers. Help users refine their project milestones through conversation.
-
-All milestones and requirements must be DEVELOPER-FOCUSED and CODE-VERIFIABLE.
-
-Format your response as:
-<explanation>
-Your conversational response here
-</explanation>
-
-<milestones>
-[JSON array of developer-focused milestones if applicable]
-</milestones>
-
-Each milestone must have: id, title, description, requirements (list of strings), estimated_hours (integer)"""
 
         user_content = ""
         if conversation_history:
             user_content += f"Previous conversation:\n{conversation_history}\n\n"
         if current_milestones:
             user_content += f"Current milestones:\n{json.dumps(current_milestones, indent=2)}\n\n"
-        user_content += f"User message: {message}"
+        user_content += f"Developer message: {message}"
 
         try:
-            response_text = self._chat(system_prompt, user_content)
+            response_text = self._chat(_CHAT_SYSTEM, user_content)
 
             explanation = ""
             milestones = []
@@ -203,51 +227,39 @@ Each milestone must have: id, title, description, requirements (list of strings)
                         response_text.find("</milestones>")
                     ].strip()
                     try:
-                        milestones = json.loads(milestones_json)
-                        milestones = self._normalize_milestones(milestones)
+                        milestones = self._normalize_milestones(json.loads(milestones_json))
                     except json.JSONDecodeError:
                         pass
             else:
                 explanation = response_text
                 if '[' in response_text and ']' in response_text:
                     try:
-                        json_start = response_text.find('[')
-                        json_end = response_text.rfind(']') + 1
-                        milestones = json.loads(response_text[json_start:json_end])
-                        explanation = response_text[:json_start].strip()
-                        milestones = self._normalize_milestones(milestones)
+                        s = response_text.find('[')
+                        e = response_text.rfind(']') + 1
+                        milestones = self._normalize_milestones(json.loads(response_text[s:e]))
+                        explanation = response_text[:s].strip()
                     except Exception:
                         pass
 
             return {
-                "response": explanation or "I understand. How would you like to proceed?",
+                "response": explanation or "Understood. What would you like to adjust?",
                 "milestones": milestones
             }
 
         except Exception as e:
             return {
-                "response": f"I encountered an error: {str(e)}. Could you rephrase your request?",
+                "response": f"Error: {str(e)}. Please rephrase.",
                 "milestones": []
             }
 
     def _normalize_milestones(self, milestones: list) -> list:
-        """Ensure IDs are valid UUIDs and hours are ints, add deadlines."""
+        result = []
         for m in milestones:
-            if 'id' not in m or not m['id'] or len(str(m['id'])) < 10:
-                m['id'] = str(uuid.uuid4())
-            else:
-                try:
-                    uuid.UUID(str(m['id']))
-                except (ValueError, AttributeError):
-                    m['id'] = str(uuid.uuid4())
-
+            m = self._normalize_hours(m)
+            m = self._ensure_uuid(m)
+            if 'requirements' in m:
+                m['requirements'] = self._scrub_requirements(m['requirements'])
             if 'estimated_hours' in m:
-                if isinstance(m['estimated_hours'], float):
-                    m['estimated_hours'] = int(round(m['estimated_hours']))
-                elif isinstance(m['estimated_hours'], str):
-                    try:
-                        m['estimated_hours'] = int(float(m['estimated_hours']))
-                    except ValueError:
-                        m['estimated_hours'] = 1
                 m['deadline'] = self._calculate_deadline(m['estimated_hours'])
-        return milestones
+            result.append(m)
+        return result
