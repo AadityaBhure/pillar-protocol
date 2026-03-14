@@ -212,3 +212,13 @@ class MockDatabaseManager:
         if user_id in self.user_reputation:
             self.user_reputation[user_id]["total_late_deliveries"] = \
                 self.user_reputation[user_id].get("total_late_deliveries", 0) + 1
+
+    def save_submission_source(self, milestone_id: str, source: str,
+                                files: list = None, github_url: str = None) -> None:
+        """Save submission source metadata to milestone"""
+        if milestone_id in self.milestones:
+            self.milestones[milestone_id]["submission_source"] = source
+            if source == "github" and github_url:
+                self.milestones[milestone_id]["submission_github_url"] = github_url
+            elif source == "local" and files:
+                self.milestones[milestone_id]["submission_files"] = files

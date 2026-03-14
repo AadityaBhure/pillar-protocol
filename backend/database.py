@@ -246,6 +246,18 @@ class DatabaseManager:
                 "total_late_deliveries": reputation.get("total_late_deliveries", 0) + 1
             }).eq("user_id", user_id).execute()
 
+    def save_submission_source(self, milestone_id: str, source: str,
+                                files: list = None, github_url: str = None) -> None:
+        """Save submission source metadata to milestone (local files or github url)"""
+        import json
+        data = {"submission_source": source}
+        if source == "github" and github_url:
+            data["submission_github_url"] = github_url
+        elif source == "local" and files:
+            # Store as JSON: list of {name, content}
+            data["submission_files"] = json.dumps(files)
+        self.client.table("milestones").update(data).eq("id", milestone_id).execute()
+
     def get_projects_by_user(self, user_id: str) -> list:
         """Get all projects for a given user ID"""
         response = self.client.table("projects").select("*").eq("user_id", user_id).execute()

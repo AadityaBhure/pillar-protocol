@@ -443,7 +443,8 @@ async def submit_code(
     project_id: str = Form(...),
     milestone_id: str = Form(...),
     files: List[UploadFile] = File(default=None),
-    github_files: str = Form(default=None)
+    github_files: str = Form(default=None),
+    github_repo_url: str = Form(default=None)
 ):
     """Analyze uploaded code or GitHub files against checklist"""
     try:
@@ -456,8 +457,6 @@ async def submit_code(
             
             github_files_data = json.loads(github_files)
             
-            # Convert GitHub files to UploadFile-like objects
-            # Create a custom class that mimics UploadFile behavior
             class GitHubFile:
                 def __init__(self, filename, content):
                     self.filename = filename
@@ -554,6 +553,34 @@ async def submit_code(
             error_detail = f"Failed to lock milestone. Current status: {current_status_after.value if current_status_after else 'UNKNOWN'}. The milestone must be in PENDING state to accept submissions."
             logger.error(f"Lock failed for milestone {milestone_id}: {error_detail}")
             raise HTTPException(status_code=400, detail=error_detail)
+        
+        # Save submission source metadata for client download
+        try:
+            if github_files:
+                import json
+                github_files_data = json.loads(github_files) if isinstance(github_files, str) else github_files
+                db.save_submission_source(
+                    milestone_id=milestone_id,
+                    source="github",
+                    github_url=github_repo_url or (
+                        f"https://github.com/{github_files_data[0].get('path','').split('/')[0]}"
+                        if github_files_data else None
+                    )
+                )
+            else:
+                local_file_names = [f.filename for f in files if hasattr(f, 'filename')]
+                db.save_submission_source(
+                    milestone_id=milestone_id,
+                    source="local",
+                    files=[{"name": f.filename, "content": (await f.read()).decode('utf-8', errors='replace')}
+                           for f in files if hasattr(f, 'filename')]
+                )
+                # Re-seek files after reading for content storage
+                for f in files:
+                    if hasattr(f, 'seek'):
+                        await f.seek(0)
+        except Exception as e:
+            logger.warning(f"Could not save submission source: {e}")
         
         try:
             # Analyze code
@@ -853,6 +880,45 @@ async def adjust_deadline(milestone_id: str, request: dict):
     except Exception as e:
         logger.error(f"Error adjusting deadline: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to adjust deadline: {str(e)}")
+
+
+@app.get("/milestone/{milestone_id}/download")
+async def download_milestone_files(milestone_id: str):
+    """Download submitted files for a RELEASED milestone as a zip"""
+    import json, zipfile, io
+    from fastapi.responses import StreamingResponse
+
+    milestone = db.get_milestone(milestone_id)
+    if not milestone:
+        raise HTTPException(status_code=404, detail="Milestone not found")
+    if milestone.get("status") != "RELEASED":
+        raise HTTPException(status_code=403, detail="Files only available for RELEASED milestones")
+
+    source = milestone.get("submission_source")
+    if source == "github":
+        url = milestone.get("submission_github_url")
+        if not url:
+            raise HTTPException(status_code=404, detail="No GitHub URL recorded for this milestone")
+        return {"type": "github", "url": url}
+
+    # Local files — return as zip
+    raw = milestone.get("submission_files")
+    if not raw:
+        raise HTTPException(status_code=404, detail="No files recorded for this milestone")
+
+    files = json.loads(raw) if isinstance(raw, str) else raw
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for f in files:
+            zf.writestr(f["name"], f.get("content", ""))
+    buf.seek(0)
+
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename=milestone_{milestone_id[:8]}.zip"}
+    )
 
 
 @app.get("/projects/all")

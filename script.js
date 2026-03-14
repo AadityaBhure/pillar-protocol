@@ -114,7 +114,7 @@ async function loadClientDashboard() {
 
         let html = `<div class="orders-table-wrap"><table class="orders-table">
             <thead><tr>
-                <th>Project</th><th>Milestone</th><th>Status</th><th>Deadline</th><th>Cost</th>
+                <th>Project</th><th>Milestone</th><th>Status</th><th>Deadline</th><th>Cost</th><th>Deliverable</th>
             </tr></thead><tbody>`;
 
         projects.forEach(project => {
@@ -122,19 +122,28 @@ async function loadClientDashboard() {
             if (milestones.length === 0) {
                 html += `<tr>
                     <td>${escapeHtml(project.title)}</td>
-                    <td colspan="4" style="color:var(--text-muted)">No milestones</td>
+                    <td colspan="5" style="color:var(--text-muted)">No milestones</td>
                 </tr>`;
             } else {
                 milestones.forEach((m, i) => {
                     const statusClass = `status-${(m.status || 'pending').toLowerCase()}`;
-                    const deadline = m.deadline ? new Date(m.deadline).toLocaleDateString() : '—';
-                    const cost = m.estimated_hours ? `$${m.estimated_hours * 50}` : '—';
+                    const deadline = m.deadline ? new Date(m.deadline).toLocaleDateString() : '\u2014';
+                    const cost = m.estimated_hours ? `$${m.estimated_hours * 50}` : '\u2014';
+                    let deliverableHtml = '<span style="color:var(--text-muted)">\u2014</span>';
+                    if (m.status === 'RELEASED') {
+                        if (m.submission_source === 'github' && m.submission_github_url) {
+                            deliverableHtml = `<a href="${escapeHtml(m.submission_github_url)}" target="_blank" class="btn btn-primary" style="padding:4px 10px;font-size:12px;"><i class="fab fa-github"></i> View Repo</a>`;
+                        } else {
+                            deliverableHtml = `<button class="btn btn-primary" style="padding:4px 10px;font-size:12px;" onclick="downloadMilestoneFiles('${m.id}')"><i class="fas fa-download"></i> Download</button>`;
+                        }
+                    }
                     html += `<tr>
                         ${i === 0 ? `<td rowspan="${milestones.length}" style="font-weight:600">${escapeHtml(project.title)}<br><small style="color:var(--text-muted)">${project.id}</small></td>` : ''}
                         <td>${escapeHtml(m.title)}</td>
                         <td><span class="status-badge ${statusClass}">${m.status || 'PENDING'}</span></td>
                         <td>${deadline}</td>
                         <td>${cost}</td>
+                        <td>${deliverableHtml}</td>
                     </tr>`;
                 });
             }
@@ -145,6 +154,36 @@ async function loadClientDashboard() {
 
     } catch (e) {
         container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-circle"></i><p>Could not load projects: ${e.message}</p></div>`;
+    }
+}
+
+async function downloadMilestoneFiles(milestoneId) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/milestone/${milestoneId}/download`);
+        if (!response.ok) {
+            const err = await safeJsonParse(response);
+            throw new Error(err.detail || 'Failed to download files');
+        }
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+            const data = await response.json();
+            if (data.type === 'github') {
+                window.open(data.url, '_blank');
+                return;
+            }
+        }
+        // Zip download
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `milestone_${milestoneId.slice(0, 8)}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    } catch (e) {
+        showToast('Download Failed', e.message, 'error');
     }
 }
 
@@ -1045,6 +1084,9 @@ async function submitCode() {
         
         // Send GitHub files as JSON
         formData.append('github_files', JSON.stringify(fetchedFiles));
+        // Send the repo URL so backend can store it for client download
+        const repoUrl = document.getElementById('github-repo').value.trim();
+        if (repoUrl) formData.append('github_repo_url', repoUrl);
         
     } else {
         if (!filesInput.files || filesInput.files.length === 0) {
