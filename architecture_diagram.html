@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Pillar Protocol — System Architecture</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0f1117;
+    color: #e2e8f0;
+    font-family: 'Segoe UI', sans-serif;
+    padding: 40px;
+  }
+  h1 {
+    text-align: center;
+    font-size: 28px;
+    margin-bottom: 8px;
+    color: #1dbf73;
+    letter-spacing: 1px;
+  }
+  p.subtitle {
+    text-align: center;
+    color: #94a3b8;
+    margin-bottom: 40px;
+    font-size: 14px;
+  }
+  .diagram-section {
+    background: #1a1d2e;
+    border-radius: 16px;
+    padding: 32px;
+    margin-bottom: 32px;
+    border: 1px solid rgba(255,255,255,0.07);
+  }
+  .diagram-section h2 {
+    font-size: 16px;
+    color: #6366f1;
+    margin-bottom: 20px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .mermaid {
+    display: flex;
+    justify-content: center;
+  }
+  .export-btn {
+    display: block;
+    margin: 0 auto 40px;
+    padding: 12px 32px;
+    background: #1dbf73;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .export-btn:hover { background: #17a862; }
+</style>
+</head>
+<body>
+
+<h1>Pillar Protocol</h1>
+<p class="subtitle">AI-Powered Freelance Escrow Platform — System Architecture</p>
+
+<button class="export-btn" onclick="window.print()">🖨 Print / Export as PDF</button>
+
+<!-- DIAGRAM 1: Overall System -->
+<div class="diagram-section">
+  <h2>Overall System Architecture</h2>
+  <div class="mermaid">
+graph TB
+    subgraph BROWSER["🌐 Client Browser"]
+        UI_CLIENT["Client UI\n(Plan · Pay · Vendors · Chat)"]
+        UI_DEV["Developer UI\n(Dashboard · Submit · Payout · Messages)"]
+        UI_AUTH["Auth UI\n(Login · Register)"]
+    end
+
+    subgraph VERCEL["☁️ Vercel Serverless (FastAPI)"]
+        AUTH["Auth\n/register · /login"]
+        PLAN["Plan\n/plan · /plan/finalize"]
+        SUBMIT["Submit\n/submit · /github/fetch"]
+        PAYMENT["Payment\n/payment/confirm · /estimate"]
+        CHAT_API["Chat\n/chat/send · /chat/history"]
+        PAYOUT["Payout\n/developer/earnings"]
+    end
+
+    subgraph AGENTS["🤖 AI Agents (Groq LLaMA 3)"]
+        ARCHITECT["Architect Agent\nMilestone planning\n+ Project title generation"]
+        INSPECTOR["Inspector Agent\nCode review\n+ Coverage scoring"]
+        BANKER["Banker Agent\nEscrow release\n+ Timeline check"]
+        REPUTATION["Reputation Manager\nPFI score\n+ On-time tracking"]
+    end
+
+    subgraph SUPABASE["🗄️ Supabase (PostgreSQL)"]
+        DB_USERS["users"]
+        DB_PROJECTS["projects"]
+        DB_MILESTONES["milestones"]
+        DB_REPUTATION["user_reputation"]
+        DB_CHAT["chat_messages"]
+        DB_AUDIT["deadline_audit"]
+    end
+
+    UI_CLIENT -->|REST| VERCEL
+    UI_DEV -->|REST| VERCEL
+    UI_AUTH -->|REST| AUTH
+
+    PLAN -->|generate| ARCHITECT
+    SUBMIT -->|review| INSPECTOR
+    INSPECTOR -->|pass| BANKER
+    BANKER -->|update| REPUTATION
+
+    VERCEL -->|read/write| SUPABASE
+
+    style BROWSER fill:#1e2235,stroke:#6366f1,color:#e2e8f0
+    style VERCEL fill:#1e2235,stroke:#1dbf73,color:#e2e8f0
+    style AGENTS fill:#1e2235,stroke:#f59e0b,color:#e2e8f0
+    style SUPABASE fill:#1e2235,stroke:#06b6d4,color:#e2e8f0
+  </div>
+</div>
+
+<!-- DIAGRAM 2: Agent Pipeline -->
+<div class="diagram-section">
+  <h2>Agent Pipeline — Project Lifecycle</h2>
+  <div class="mermaid">
+flowchart LR
+    A(["👤 Client\ndescribes project"]) --> B["Architect Agent\nGenerates milestones\n& smart title"]
+    B --> C["Client selects\nDeveloper + Pays"]
+    C --> D["Milestones\nLocked in Escrow"]
+    D --> E["Developer\nsubmits code"]
+    E --> F["Inspector Agent\nReviews code vs\nrequirements"]
+    F -->|Pass| G["Banker Agent\nReleases payment"]
+    F -->|Fail| E
+    G --> H["Reputation Manager\nUpdates PFI score\n& delivery stats"]
+    H --> I(["✅ Project\nComplete"])
+
+    style A fill:#6366f1,color:#fff,stroke:none
+    style I fill:#1dbf73,color:#fff,stroke:none
+    style F fill:#f59e0b,color:#fff,stroke:none
+    style G fill:#1dbf73,color:#fff,stroke:none
+  </div>
+</div>
+
+<!-- DIAGRAM 3: Database Schema -->
+<div class="diagram-section">
+  <h2>Database Schema (Supabase)</h2>
+  <div class="mermaid">
+erDiagram
+    users {
+        uuid id PK
+        string name
+        string email
+        string role
+        float hourly_rate
+        float payment_threshold
+    }
+    projects {
+        uuid id PK
+        uuid user_id FK
+        uuid assigned_developer_id FK
+        string title
+        float developer_hourly_rate
+    }
+    milestones {
+        uuid id PK
+        uuid project_id FK
+        string title
+        float estimated_hours
+        string status
+        timestamp deadline
+        string timeline_status
+    }
+    user_reputation {
+        uuid user_id FK
+        float reputation_score
+        int on_time_count
+        int late_count
+        json reputation_history
+    }
+    chat_messages {
+        uuid id PK
+        string room_id
+        uuid sender_id FK
+        string message
+        timestamp created_at
+    }
+
+    users ||--o{ projects : "creates"
+    users ||--o{ projects : "assigned to"
+    projects ||--o{ milestones : "has"
+    users ||--o| user_reputation : "has"
+    users ||--o{ chat_messages : "sends"
+  </div>
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      primaryColor: '#6366f1',
+      primaryTextColor: '#e2e8f0',
+      primaryBorderColor: '#6366f1',
+      lineColor: '#94a3b8',
+      secondaryColor: '#1a1d2e',
+      tertiaryColor: '#1a1d2e',
+      background: '#0f1117',
+      mainBkg: '#1a1d2e',
+      nodeBorder: '#6366f1',
+      clusterBkg: '#1e2235',
+      titleColor: '#e2e8f0',
+      edgeLabelBackground: '#1a1d2e',
+      fontFamily: 'Segoe UI, sans-serif'
+    }
+  });
+</script>
+</body>
+</html>
