@@ -1,163 +1,339 @@
+# 🏛️ Pillar Protocol
+
 <div align="center">
-  
-# 🏛️ The Pillar Protocol
-**Autonomous AI Orchestration for Trustless Software Development**
 
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=flat&logo=fastapi)](https://fastapi.tiangolo.com/)
-[![Vercel](https://img.shields.io/badge/Deployed_on-Vercel-black?logo=vercel)](https://vercel.com)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+**Trustless software delivery, enforced by AI.**
 
-*A multi-agent AI platform bridging the gap between natural language project planning, deterministic code validation, state-based escrow, and developer reputation.*
+*A multi-agent escrow platform where clients describe projects in plain English, AI plans and prices them, developers build them, and payments release automatically — only after code passes a strict automated audit.*
 
-[Live Demo](https://pillar-protocol.vercel.app/) • [API Docs](#-api-architecture) • [Architecture](#-system-architecture)
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)](https://supabase.com)
+[![Groq](https://img.shields.io/badge/LLM-Groq%20LLaMA%203-F55036?style=for-the-badge)](https://groq.com)
+[![Vercel](https://img.shields.io/badge/Deployed-Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://vercel.com)
 
 </div>
 
 ---
 
-## 🚀 The Vision
+## 🎯 The Problem We Solve
 
-Freelance development and remote collaboration are fundamentally broken. Scope creep, technical debt, and payment disputes plague the industry. **The Pillar Protocol** solves this by removing the human bottleneck in validation and escrow. 
+Freelance software development is broken by a fundamental trust gap:
 
-By employing a quad-agent AI architecture, the protocol automatically converts vague client ideas into strict milestones, mathematically verifies the submitted code against those exact milestones, manages the state of the escrow, and adjusts the developer's reputation score—all entirely autonomously.
+- **Clients** pay upfront and hope the developer delivers working code
+- **Developers** build and hope the client pays after delivery
+- **Both sides** rely on vague contracts, manual reviews, and dispute resolution that takes weeks
 
----
-
-## 🧠 The Four Pillars (Agent Architecture)
-
-The system is orchestrated by four specialized AI agents, each strictly decoupled to ensure deterministic workflows over probabilistic LLM generation.
-
-### 1. 🏗️ Architect Agent (The Planner)
-* **Role:** Translates ambiguous user prompts into structured, immutable JSON milestones.
-* **Logic:** Analyzes scope, estimates complexity, and generates explicit constraints (e.g., "Must use `main.c`", "Must include input validation").
-* **Output:** JSON schema injected directly into the Supabase database.
-
-### 2. 🔍 Inspector Agent (The Auditor)
-* **Role:** A ruthless, static-analysis AI that checks code against the Architect's constraints.
-* **Logic:** It doesn't just check if code runs; it checks for **Compliance**.
-  * *Example:* If a developer names a file `addition.c` instead of `main.c`, the Inspector fails the build.
-  * *Example:* If `scanf` is used without checking the input buffer for non-integer values, it fails the build for security vulnerabilities.
-* **Output:** Boolean Pass/Fail flag with detailed technical feedback.
-
-### 3. 💰 Banker Agent (The Escrow)
-* **Role:** Manages the state machine of the project's financial flow.
-* **States:** `PENDING` → `LOCKED` (Code submitted, awaiting Inspector) → `RELEASED` / `DISPUTED`.
-* **Security:** Cryptographically prevents the deletion or modification of milestones once code has been submitted for review.
-
-### 4. 🏆 Bureau Agent (The Judge)
-* **Role:** Calculates the **PFI (Performance & Financial Index)**.
-* **Logic:** A weighted algorithm evaluating a developer's historical success.
-  * *Formula:* PFI = (0.6 * Code Coverage/Quality) + (0.4 * Milestone Completion Rate)
-* **Output:** A dynamic reputation score updated in real-time upon milestone release.
+**Pillar Protocol eliminates this entirely.** Payment is held in escrow and released *only* when an AI Inspector confirms the submitted code actually implements what was agreed upon. No human arbitration. No ambiguity. Just verifiable delivery.
 
 ---
 
-## 🏗️ System Architecture
+## 🤖 The Four Pillars — AI Agent Architecture
 
-Designed for high-speed serverless deployment, Pillar Protocol uses a "Flat & Fast" repository structure.
-
-```text
-pillar-protocol/
-├── index.html          # Vanilla JS/CSS Frontend (Zero-build pipeline)
-├── style.css           # Cyberpunk-inspired terminal UI
-├── script.js           # REST API client & UI state management
-├── vercel.json         # Vercel Serverless Routing & Python Runtime config
-├── requirements.txt    # Python dependencies
-└── backend/
-    ├── main.py         # FastAPI Entrypoint & Routes
-    ├── agents.py       # LLM Prompts and Agent Logic
-    └── database.py     # Supabase Connection pooling
 ```
-### Tech Stack
-* **Frontend:** Vanilla HTML5, CSS3 (Neon/Glow UI), JavaScript (ES6+).
-* **Backend:** Python 3.11+, FastAPI, Pydantic (Data Validation).
-* **AI Provider:** LLM-Agnostic Setup (Built for Groq, Gemini, or OpenAI via standard SDKs).
-* **Database:** Supabase (PostgreSQL).
-* **Deployment:** Vercel (Serverless Functions for Python).
+Client Prompt
+     │
+     ▼
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐     ┌──────────────────┐
+│  🏗️  ARCHITECT  │────▶│  🔍  INSPECTOR   │────▶│  💰  BANKER     │────▶│  📊  BUREAU      │
+│                 │     │                  │     │                 │     │                  │
+│  Interviews     │     │  Reviews code    │     │  Controls       │     │  Calculates PFI  │
+│  client, breaks │     │  against reqs,   │     │  PENDING →      │     │  score, updates  │
+│  project into   │     │  scores 0–100,   │     │  LOCKED →       │     │  reputation,     │
+│  milestones     │     │  pass/fail       │     │  RELEASED       │     │  tracks on-time  │
+└─────────────────┘     └──────────────────┘     └─────────────────┘     └──────────────────┘
+```
 
-### ⚡ Key Features & Demos
+### �️ Architect Agent
+The **project planner**. Converts plain-English descriptions into precise, code-verifiable milestone checklists.
 
-| Feature | Description | Technical Implementation |
-| :--- | :--- | :--- |
-| **Strict Compliance Auditing** | Prevents "lazy coding" from entering production. | Inspector Agent searches for explicit variables, file names, and error handling loops required by the Architect. |
-| **Provider-Agnostic AI** | Never get rate-limited or locked into one provider. | Environment variables allow instant hot-swapping between Gemini, Groq (Llama 3), or OpenAI. |
-| **State-Based Mutability** | Prevents race conditions during code review. | Database row-level locking via Supabase when a milestone transitions to `LOCKED`. |
-| **Real-time PFI Gauge** | Beautiful, dynamic representation of developer trust. | SVG-based circular progress animation mathematically bound to the Bureau Agent's JSON output. |
+- Conducts a conversational interview to understand scope, features, and deadline
+- Enforces strict milestone count rules — a "subtraction of two numbers" gets **1 milestone**, not 5
+- Supports decimal hour estimates (0.5h minimum) to prevent price inflation
+- Actively **scrubs vague requirements** — strips "user-friendly", "clean code", "best practices" before saving
+- Generates a smart project title by analysing the full conversation via LLM
+- Distributes deadlines proportionally across milestones based on estimated hours
+- Powered by **Groq LLaMA 3.3 70B Versatile**
 
-### 🚀 Quick Start (Local Development)
+### 🔍 Inspector Agent
+The **code auditor**. Reviews submitted code against milestone requirements using LLM analysis.
 
-**1. Clone & Install**
+- Accepts file uploads (`.py`, `.js`, `.ts`, `.java`, `.go`, `.rs`, `.cpp`, `.jsx`, `.tsx`) or full GitHub repo fetches
+- Concatenates all files into a single code blob, SHA-256 hashes it for audit integrity
+- Returns structured result: `passed` (bool), `coverage_score` (0–100), `feedback`, `missing_requirements`
+- Powered by **Groq LLaMA 3.3 70B Versatile**
+
+### 💰 Banker Agent
+The **escrow state machine**. Controls the full lifecycle of every milestone payment.
+
+- Manages three states: `PENDING` → `LOCKED` → `RELEASED`
+- Records `submission_time` as ISO 8601 timestamp at lock
+- Compares submission time against deadline → `on-time` or `late`
+- Releases **full payment regardless of timeliness** (reputation tracks the difference)
+- Auto-unlocks milestones stuck in `LOCKED` for >5 minutes (graceful failure recovery)
+- Simulates the **x402 payment protocol**
+
+### 📊 Bureau / Reputation Manager
+The **trust scorer**. Builds a persistent, tamper-evident reputation profile for every developer.
+
+- Calculates **PFI (Performance Fidelity Index)** after every milestone release
+- Configurable score weights via `deadline_config.json`:
+  - On-time delivery: **+2 pts** | Late delivery: **−5 pts**
+  - High quality (PFI > 80): **+1 pt** | Low quality (PFI < 50): **−2 pts**
+- Score clamped to 0–100 range
+- Full event history (type, delta, timestamp, milestone ID) persisted to Supabase
+
+---
+
+## ⚙️ Tech Stack
+
+| Layer | Technology | Role |
+|---|---|---|
+| **Frontend** | Vanilla HTML / CSS / JavaScript | Zero-build SPA |
+| **Backend** | Python 3.11, FastAPI | REST API + agent orchestration |
+| **LLM** | Groq API — LLaMA 3.3 70B | Architect, Inspector, title generation |
+| **Database** | Supabase (PostgreSQL) | All persistent data |
+| **Auth** | Custom bcrypt | Client + developer accounts |
+| **Hosting** | Vercel Serverless Python | Zero-config deployment |
+| **Realtime** | HTTP polling (3s) | Chat message delivery |
+| **GitHub Integration** | GitHub Trees API + parallel fetch | Code submission from repos |
+
+---
+
+## ✨ Key Features
+
+**For Clients**
+- 💬 AI-powered project planning via conversational chat — no technical knowledge required
+- 💳 Transparent milestone pricing — developer's hourly rate × estimated hours, shown as full breakdown
+- 🔒 Escrow protection — funds locked until code passes inspection
+- 🏪 Developer marketplace — browse developers with live hourly rates and reputation scores
+- 📨 Real-time client ↔ developer chat
+- 📊 Project dashboard — track every milestone status, deadline, cost, and download delivered code
+
+**For Developers**
+- 📋 Structured work — every project arrives with clear, code-verifiable requirements
+- ⚡ Automatic payment release — pass the Inspector, get paid. No chasing invoices
+- ⭐ Verifiable reputation — on-time rate and PFI score visible to all clients
+- 🐙 GitHub integration — submit code directly from a repository URL
+- 💰 Payout dashboard — total earnings, per-project breakdown, milestone history
+
+**Platform**
+- 🛡️ Strict compliance auditing — Inspector rejects code that doesn't implement agreed requirements
+- 🔄 Provider-agnostic AI — accepts `GROQ_API_KEY` or `GEMINI_API_KEY`; swap LLMs without code changes
+- 🗄️ Mock database fallback — runs fully offline without Supabase for local development
+- 📐 Decimal milestone hours — 0.5h increments prevent trivial task inflation
+- 🔁 Backward-compatible deadlines — null deadlines treated as on-time (no breaking changes)
+
+---
+
+## 🚀 Quick Start — Local Development
+
+### Prerequisites
+- Python 3.11+
+- [Groq API key](https://console.groq.com) (free tier available)
+- [Supabase](https://supabase.com) project *(optional — mock DB works without it)*
+
+### 1. Clone & install
+
 ```bash
-git clone [https://github.com/AadityaBhure/pillar-protocol.git](https://github.com/AadityaBhure/pillar-protocol.git)
+git clone https://github.com/AadityaBhure/pillar-protocol.git
 cd pillar-protocol
+
+python -m venv .venv
+# Windows
+.venv\Scripts\activate
+# macOS / Linux
+source .venv/bin/activate
+
 pip install -r requirements.txt
 ```
 
-**2. Environment Configuration (.env)**
+### 2. Configure environment
+
 ```bash
-Create a .env file in the root directory. The system is designed to use Groq for high-speed, high-limit hackathon testing.
-# AI Provider (Choose One)
-GROQ_API_KEY=gsk_your_groq_key
-SUPABASE_URL=[https://your-project.supabase.co](https://your-project.supabase.co)
-SUPABASE_SERVICE_ROLE_KEY=your_secret_role_key
+cp .env.example .env
 ```
 
-**3. Run the Backend**
+Edit `.env`:
+
+```env
+# Required
+GROQ_API_KEY=gsk_your_groq_key_here
+
+# Required for production (optional locally — mock DB used if missing)
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your_supabase_anon_key
+
+# Optional — prevents GitHub API rate limits on repo fetch
+GITHUB_TOKEN=ghp_your_token
+```
+
+### 3. Run database migrations
+
+In your **Supabase SQL Editor**, run these files in order:
+
+```
+migrations/001_add_deadline_fields_to_milestones.sql
+migrations/002_add_reputation_fields_to_users.sql
+migrations/003_create_deadline_audit_table.sql
+migrations/004_add_submission_source_to_milestones.sql
+migrations/005_create_users_table.sql
+migrations/006_add_developer_to_projects.sql
+migrations/007_add_developer_hourly_rate_to_projects.sql
+migrations/008_change_estimated_hours_to_numeric.sql
+migrations/009_create_chat_messages.sql
+```
+
+### 4. Start the backend
+
 ```bash
 uvicorn backend.main:app --reload --port 8000
 ```
 
-**4. Serve the Frontend**
-In a new terminal window:
+API available at `http://localhost:8000`
+Interactive docs at `http://localhost:8000/docs`
+
+### 5. Open the frontend
+
 ```bash
-python -m http.server 8080
+# Option A — open directly
+start index.html
+
+# Option B — serve with Python
+python -m http.server 3000
+# then visit http://localhost:3000
 ```
 
-Visit http://localhost:8080 to view the dashboard.
+> The frontend auto-detects `localhost` and routes API calls to `http://localhost:8000`.
 
-###☁️ Cloud Deployment (Vercel)
-The repository is pre-configured for Vercel Serverless deployment via vercel.json.
+---
 
-Import the repository into your Vercel Dashboard.
+## ☁️ Vercel Deployment
 
-Override the framework preset to Other.
+The project is pre-configured for zero-config Vercel deployment via `vercel.json`.
 
-Add your GROQ_API_KEY, SUPABASE_URL, and SUPABASE_SERVICE_ROLE_KEY in the Environment Variables settings.
+**How routing works:**
 
-Deploy. Vercel will automatically route /api/* traffic to the FastAPI backend and serve the frontend statically.
-
-###🔧 API Architecture
-
-POST /api/plan
-Generates structured milestones from a natural language prompt.
-
-Payload: {"prompt": "string", "user_id": "string"}
-
-Response: Returns an array of Milestone Objects with requirements and estimated_hours.
-
-POST /api/submit
-The core inspection engine. Accepts multi-part form data (Code Blobs).
-
-Payload: project_id, milestone_id, and File[]
-
-Response:
+```json
 {
-  "passed": false,
-  "feedback": "Requirement Failed: The primary file must be named 'main.c', received 'addition.c'. Input validation for non-integers is missing.",
-  "pfi_impact": -2.5
+  "builds": [
+    { "src": "api/index.py",  "use": "@vercel/python" },
+    { "src": "index.html",    "use": "@vercel/static" },
+    { "src": "script.js",     "use": "@vercel/static" },
+    { "src": "style.css",     "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "/(auth|plan|chat|submit|project|projects|milestone|reputation|github|estimate|payment|health|users|events|developer)(/.*)?", "dest": "/api/index.py" },
+    { "src": "/(.*)", "dest": "/index.html" }
+  ]
 }
+```
 
-GET /api/reputation/{user_id}
-Retrieves the real-time Bureau stats.
+**Deploy steps:**
 
-Response: Returns current_pfi, total_projects, and a historical array of score changes.
+1. Push repo to GitHub
+2. Go to [vercel.com](https://vercel.com) → **New Project** → Import repo
+3. Add environment variables in Vercel dashboard:
+   - `GROQ_API_KEY`
+   - `SUPABASE_URL`
+   - `SUPABASE_KEY`
+4. Click **Deploy** — done
 
-###🛡️ Security & Constraints
-No Code Execution: The Inspector Agent performs high-context static analysis. It does not execute untrusted user code, preventing RCE (Remote Code Execution) vulnerabilities.
+> **Note:** Vercel serverless functions have a 10s execution limit on the free tier. The SSE `/events/{user_id}` endpoint is not supported on Vercel — the frontend uses HTTP polling for chat instead.
 
-Secret Management: Strict .gitignore enforcement ensures .env files are never pushed. Keys are injected at runtime via Vercel's secure environment pipeline.
+---
 
-Payload Limits: Vercel serverless functions cap at 4.5MB per request. The protocol enforces file size limits on upload to prevent memory exhaustion.
+## 📡 API Reference
 
+### Auth
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/auth/register` | Register client or developer |
+| `POST` | `/auth/login` | Login, receive user profile |
+| `GET` | `/auth/user/{user_id}` | Fetch user by ID |
 
+### Planning
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/chat/architect` | Interactive chat with Architect Agent |
+| `POST` | `/plan/finalize` | Save milestones, assign developer, generate title |
+| `GET` | `/estimate/{project_id}` | Total cost = hours × developer rate |
+
+### Payment & Escrow
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/payment/confirm` | Confirm payment (milestones stay PENDING) |
+
+### Code Submission
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/submit` | Submit code files or GitHub files for inspection |
+| `POST` | `/github/fetch` | Recursively fetch all code from a GitHub repo |
+
+### Projects & Milestones
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/projects/{user_id}` | All projects for a client |
+| `GET` | `/projects/developer/{dev_id}` | All projects assigned to a developer |
+| `GET` | `/project/{project_id}` | Full project with milestones + inspection results |
+| `PATCH` | `/milestone/{milestone_id}/deadline` | Adjust milestone deadline |
+| `GET` | `/milestone/{milestone_id}/download` | Download submitted files as ZIP |
+| `POST` | `/milestone/{milestone_id}/unlock` | Manually unlock a stuck milestone |
+
+### Users, Reputation & Earnings
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/users/developers` | List all developers with rates |
+| `GET` | `/reputation/{user_id}` | Full reputation profile + history |
+| `GET` | `/developer/{dev_id}/earnings` | Earnings summary |
+
+### Chat
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/chat/send` | Send a message |
+| `GET` | `/chat/history/{room_id}` | Fetch all messages in a room |
+| `GET` | `/chat/rooms/{user_id}` | All chat rooms for a user |
+
+---
+
+## 📁 Project Structure
+
+```
+pillar-protocol/
+├── agents/
+│   ├── architect.py          # Milestone planner + LLM title generation
+│   ├── inspector.py          # Code review + coverage scoring
+│   ├── banker.py             # Escrow state machine + x402 payment sim
+│   ├── bureau.py             # PFI calculation
+│   └── reputation_manager.py # Score deltas + on-time tracking
+├── backend/
+│   ├── main.py               # All FastAPI routes
+│   ├── database.py           # Supabase query layer
+│   ├── mock_database.py      # In-memory fallback for local dev
+│   └── models.py             # Pydantic models
+├── api/
+│   └── index.py              # Vercel serverless entry point
+├── migrations/               # SQL migration files (001–009)
+├── utils/
+│   └── file_processor.py     # File validation + ZIP creation
+├── index.html                # Single-page frontend
+├── script.js                 # All frontend logic
+├── style.css                 # Dark theme design system
+├── vercel.json               # Serverless deployment config
+└── deadline_config.json      # Configurable reputation weights
+```
+
+---
+
+## 🏆 Built For
+
+Pillar Protocol was built as a hackathon project demonstrating:
+
+- **Multi-agent AI orchestration** — four agents with distinct LLM-powered roles
+- **Trustless escrow via AI** — automated code verification replaces human arbitration
+- **Provider-agnostic LLM** — works with Groq, OpenAI, or any compatible API
+- **Full-stack serverless** — FastAPI + Vanilla JS on Vercel, zero infrastructure
+
+---
+
+*Built with ❤️ — Powered by Groq LLaMA 3, FastAPI, and Supabase.*
