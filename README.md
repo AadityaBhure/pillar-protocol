@@ -337,4 +337,5 @@ Pillar Protocol was built as a hackathon project demonstrating:
 ---
 
 *Built with ❤️ — Powered by Groq LLaMA 3, FastAPI, and Supabase.*
-*Made By: Aaditya Bhure, Reyon Bose*
+
+## *Made By: Aaditya Bhure, Reyon Bose*
